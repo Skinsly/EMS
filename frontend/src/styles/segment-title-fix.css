@@ -1,0 +1,147 @@
+.stock-manage-page .stock-title-segment-wrap,
+.stock-records-page .stock-title-segment-wrap {
+  display: block !important;
+  width: auto !important;
+  max-width: max-content !important;
+  justify-self: center !important;
+  min-height: auto !important;
+  height: auto !important;
+  padding: 0 !important;
+  border: none !important;
+  background: transparent !important;
+  box-shadow: none !important;
+  border-radius: 0 !important;
+}
+
+.stock-manage-page .stock-title-segment-wrap .stock-dark-segment,
+.stock-records-page .stock-title-segment-wrap .stock-dark-segment {
+  --el-segmented-item-selected-bg-color: transparent !important;
+  --el-segmented-item-selected-color: var(--segment-active-text) !important;
+  border: 1px solid var(--segment-shell-border) !important;
+  background: var(--segment-shell-bg) !important;
+  box-shadow: var(--segment-shell-shadow) !important;
+  border-radius: 999px !important;
+  padding: 2px !important;
+  overflow: hidden !important;
+}
+
+.stock-manage-page .stock-title-segment-wrap .stock-dark-segment .el-segmented__item::before,
+.stock-records-page .stock-title-segment-wrap .stock-dark-segment .el-segmented__item::before,
+.stock-manage-page .stock-title-segment-wrap .stock-dark-segment .el-segmented__item::after,
+.stock-records-page .stock-title-segment-wrap .stock-dark-segment .el-segmented__item::after,
+.stock-manage-page .stock-title-segment-wrap .stock-dark-segment .el-segmented__item-selected::before,
+.stock-records-page .stock-title-segment-wrap .stock-dark-segment .el-segmented__item-selected::before,
+.stock-manage-page .stock-title-segment-wrap .stock-dark-segment .el-segmented__item-selected::after,
+.stock-records-page .stock-title-segment-wrap .stock-dark-segment .el-segmented__item-selected::after,
+.stock-manage-page .stock-title-segment-wrap .stock-dark-segment .el-segmented__thumb,
+.stock-records-page .stock-title-segment-wrap .stock-dark-segment .el-segmented__thumb {
+  display: none !important;
+}
+
+.stock-manage-page .stock-title-segment-wrap .stock-dark-segment .el-segmented__group,
+.stock-records-page .stock-title-segment-wrap .stock-dark-segment .el-segmented__group {
+  gap: 0 !important;
+}
+
+.stock-manage-page .stock-title-segment-wrap .stock-dark-segment .el-segmented__item-selected,
+.stock-records-page .stock-title-segment-wrap .stock-dark-segment .el-segmented__item-selected {
+  display: none !important;
+}
+
+.stock-manage-page .stock-title-segment-wrap .stock-dark-segment .el-segmented__item,
+.stock-records-page .stock-title-segment-wrap .stock-dark-segment .el-segmented__item {
+  min-width: 84px !important;
+  height: 30px !important;
+  padding: 0 14px !important;
+  font-size: 14px !important;
+  font-weight: 600 !important;
+  line-height: 30px !important;
+  border-radius: 999px !important;
+  color: var(--segment-text) !important;
+  background: transparent !important;
+}
+
+.stock-manage-page .stock-title-segment-wrap .stock-dark-segment .el-segmented__item:hover,
+.stock-records-page .stock-title-segment-wrap .stock-dark-segment .el-segmented__item:hover {
+  color: var(--segment-text-hover) !important;
+}
+
+.stock-manage-page .stock-title-segment-wrap .stock-dark-segment .el-segmented__item.is-selected,
+.stock-records-page .stock-title-segment-wrap .stock-dark-segment .el-segmented__item.is-selected {
+  background: var(--segment-active-bg) !important;
+  color: var(--segment-active-text) !important;
+  border-radius: 999px !important;
+}
+
+@media (max-width: 900px) {
+  .stock-manage-page .stock-title-segment-wrap,
+  .stock-records-page .stock-title-segment-wrap {
+    width: 150px !important;
+    min-width: 150px !important;
+    max-width: 150px !important;
+    min-height: 30px !important;
+    height: 30px !important;
+    overflow: visible !important;
+  }
+
+  .stock-manage-page .stock-title-segment-wrap .stock-dark-segment,
+  .stock-records-page .stock-title-segment-wrap .stock-dark-segment {
+    width: 150px !important;
+    min-width: 150px !important;
+    max-width: 150px !important;
+    min-height: 30px !important;
+    height: 30px !important;
+    padding: 1px !important;
+    box-sizing: border-box !important;
+    background-clip: padding-box !important;
+    outline: none !important;
+  }
+
+  .stock-manage-page .stock-title-segment-wrap .stock-dark-segment::before,
+  .stock-records-page .stock-title-segment-wrap .stock-dark-segment::before,
+  .stock-manage-page .stock-title-segment-wrap .stock-dark-segment::after,
+  .stock-records-page .stock-title-segment-wrap .stock-dark-segment::after,
+  .stock-manage-page .stock-title-segment-wrap .stock-dark-segment .el-segmented__group::before,
+  .stock-records-page .stock-title-segment-wrap .stock-dark-segment .el-segmented__group::before,
+  .stock-manage-page .stock-title-segment-wrap .stock-dark-segment .el-segmented__group::after,
+  .stock-records-page .stock-title-segment-wrap .stock-dark-segment .el-segmented__group::after {
+    display: none !important;
+  }
+
+  .stock-manage-page .stock-title-segment-wrap .stock-dark-segment .el-segmented__group,
+  .stock-records-page .stock-title-segment-wrap .stock-dark-segment .el-segmented__group {
+    width: 100% !important;
+    display: flex !important;
+    align-items: center !important;
+    gap: 0 !important;
+    box-shadow: none !important;
+    border: none !important;
+  }
+
+  .stock-manage-page .stock-title-segment-wrap .stock-dark-segment .el-segmented__item,
+  .stock-records-page .stock-title-segment-wrap .stock-dark-segment .el-segmented__item {
+    width: 74px !important;
+    min-width: 74px !important;
+    max-width: 74px !important;
+    flex: 0 0 auto !important;
+    height: 26px !important;
+    padding: 0 !important;
+    font-size: 13px !important;
+    font-weight: 600 !important;
+    line-height: 26px !important;
+    border: none !important;
+    box-shadow: none !important;
+    outline: none !important;
+  }
+
+  .stock-manage-page .stock-title-segment-wrap .stock-dark-segment .el-segmented__item::before,
+  .stock-records-page .stock-title-segment-wrap .stock-dark-segment .el-segmented__item::before,
+  .stock-manage-page .stock-title-segment-wrap .stock-dark-segment .el-segmented__item::after,
+  .stock-records-page .stock-title-segment-wrap .stock-dark-segment .el-segmented__item::after,
+  .stock-manage-page .stock-title-segment-wrap .stock-dark-segment .el-segmented__item-selected::before,
+  .stock-records-page .stock-title-segment-wrap .stock-dark-segment .el-segmented__item-selected::before,
+  .stock-manage-page .stock-title-segment-wrap .stock-dark-segment .el-segmented__item-selected::after,
+  .stock-records-page .stock-title-segment-wrap .stock-dark-segment .el-segmented__item-selected::after {
+    display: none !important;
+  }
+}

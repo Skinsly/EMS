@@ -1,0 +1,24 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 180 180">
+  <defs>
+    <linearGradient id="bg" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0%" stop-color="#7dd3fc"/>
+      <stop offset="38%" stop-color="#3b82f6"/>
+      <stop offset="100%" stop-color="#0f172a"/>
+    </linearGradient>
+    <linearGradient id="card" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0%" stop-color="#ffffff" stop-opacity="0.98"/>
+      <stop offset="100%" stop-color="#e2e8f0" stop-opacity="0.96"/>
+    </linearGradient>
+  </defs>
+
+  <rect x="0" y="0" width="180" height="180" rx="40" fill="url(#bg)"/>
+  <ellipse cx="84" cy="22" rx="92" ry="42" fill="#ffffff" fill-opacity="0.22"/>
+
+  <rect x="34" y="36" width="112" height="108" rx="26" fill="url(#card)"/>
+  <rect x="50" y="62" width="78" height="12" rx="6" fill="#38bdf8"/>
+  <rect x="50" y="84" width="64" height="12" rx="6" fill="#60a5fa"/>
+  <rect x="50" y="106" width="50" height="12" rx="6" fill="#93c5fd"/>
+
+  <circle cx="126" cy="118" r="21" fill="#16a34a"/>
+  <path d="M126 108v20M116 118h20" stroke="#ffffff" stroke-width="7" stroke-linecap="round"/>
+</svg>

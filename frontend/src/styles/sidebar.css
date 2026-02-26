@@ -1,0 +1,479 @@
+.app-aside {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  height: 100vh;
+  background: var(--aside);
+  border-right: 1px solid var(--divider-strong);
+  backdrop-filter: blur(18px) saturate(140%);
+  transition: none;
+  overflow: visible;
+}
+
+.aside-brand {
+  margin-top: 0;
+  height: 56px;
+  display: grid;
+  place-items: center;
+  text-align: center;
+  width: 100%;
+  padding: 0;
+  border-bottom: 1px solid var(--border);
+  font-size: 20px;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  line-height: 56px;
+  white-space: nowrap;
+  background: linear-gradient(110deg, #34d399 8%, #22c55e 38%, #3b82f6 72%, #8b5cf6 100%);
+  background-size: 200% 100%;
+  background-position: center;
+  -webkit-background-clip: text;
+  background-clip: text;
+  color: transparent;
+  user-select: none;
+}
+
+.aside-brand.collapsed {
+  font-size: 20px;
+  letter-spacing: 0.06em;
+}
+
+.mobile-edge-toggle {
+  position: relative;
+  overflow: hidden;
+  isolation: isolate;
+}
+
+.mobile-edge-toggle::before {
+  content: '';
+  position: absolute;
+  inset: 1px;
+  border-radius: inherit;
+  background: var(--ios-glass-overlay);
+  pointer-events: none;
+  z-index: 0;
+}
+
+.mobile-edge-toggle::after {
+  content: '';
+  position: absolute;
+  left: 16%;
+  right: 16%;
+  top: 2px;
+  height: 34%;
+  border-radius: 999px;
+  background: var(--ios-glass-shine);
+  pointer-events: none;
+  z-index: 0;
+}
+
+.mobile-edge-toggle > * {
+  position: relative;
+  z-index: 1;
+}
+
+.app-aside .el-menu-item {
+  border-radius: 10px;
+  margin: 6px 8px;
+  height: 46px;
+  line-height: 46px;
+  font-weight: 560;
+  cursor: pointer;
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  padding: 0 !important;
+  position: relative;
+  gap: 6px;
+}
+
+.app-aside .el-menu-item span {
+  position: static;
+  text-align: center;
+}
+
+.app-aside .el-menu {
+  flex: 1;
+  padding-top: 0;
+  max-height: calc(100vh - 114px);
+}
+
+.aside-actions {
+  border-top: 1px solid var(--border);
+  min-height: 56px;
+  width: 100%;
+  box-sizing: border-box;
+  padding: 10px 10px;
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  gap: 8px;
+  flex-shrink: 0;
+}
+
+.app-aside:not(.mobile-mode) .aside-actions:not(.collapsed) {
+  justify-content: space-evenly;
+  gap: 0;
+  padding: 10px 0;
+}
+
+.aside-actions.collapsed {
+  min-height: auto;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  align-items: center;
+  gap: 6px;
+  padding: 8px 0 10px;
+}
+
+.aside-actions.collapsed > * {
+  width: 40px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.aside-actions.collapsed .el-tooltip__trigger {
+  width: 40px !important;
+  min-width: 40px !important;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.aside-actions.collapsed .icon-btn,
+.aside-actions.collapsed .icon-btn + .icon-btn,
+.aside-actions.collapsed .el-button,
+.aside-actions.collapsed .el-button + .el-button {
+  width: 40px !important;
+  min-width: 40px !important;
+  margin-left: 0 !important;
+  margin-right: 0 !important;
+}
+
+.app-aside .el-menu-item .el-icon {
+  font-size: 16px;
+  margin-right: 0 !important;
+}
+
+.app-aside .el-menu-item .el-icon + span {
+  margin-left: 0 !important;
+}
+
+.app-aside .el-menu-item > .el-tooltip__trigger {
+  width: 100%;
+  height: 100%;
+  min-width: 0;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.app-aside .el-menu-item > .el-tooltip__trigger .el-icon {
+  margin-right: 0 !important;
+}
+
+.menu-item-inner {
+  width: 100%;
+  height: 100%;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+}
+
+.menu-item-text {
+  white-space: nowrap;
+  text-align: center;
+}
+
+.app-aside:not(.mobile-mode) .el-menu:not(.el-menu--collapse) .el-menu-item .menu-item-inner {
+  display: grid;
+  grid-template-columns: 40px auto;
+  width: 100%;
+  max-width: 100%;
+  height: 100%;
+  align-items: center;
+  justify-content: center;
+  justify-items: center;
+  column-gap: 0;
+  transform: translateX(-8px);
+}
+
+.app-aside:not(.mobile-mode) .el-menu:not(.el-menu--collapse) .el-menu-item > .el-tooltip__trigger {
+  position: relative;
+  width: 100% !important;
+  height: 100% !important;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.app-aside:not(.mobile-mode) .el-menu:not(.el-menu--collapse) .el-menu-item .menu-item-inner .el-icon {
+  width: 40px;
+  min-width: 40px;
+  height: 40px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.app-aside:not(.mobile-mode) .el-menu:not(.el-menu--collapse) .el-menu-item .menu-item-inner .menu-item-text {
+  width: auto;
+  text-align: center;
+}
+
+.desktop-edge-toggle {
+  position: fixed !important;
+  top: 50%;
+  transform: translateY(-50%);
+  width: 20px !important;
+  min-width: 20px !important;
+  height: 42px !important;
+  margin-left: -10px;
+  border: none !important;
+  background: transparent !important;
+  color: color-mix(in oklab, var(--text) 88%, #0f172a 12%) !important;
+  box-shadow: none !important;
+  backdrop-filter: none !important;
+  outline: none !important;
+  overflow: visible !important;
+  transition: none !important;
+  z-index: 1200 !important;
+  padding: 0 !important;
+  display: inline-flex !important;
+  align-items: center;
+  justify-content: center;
+}
+
+.desktop-edge-toggle::before,
+.desktop-edge-toggle::after {
+  display: none !important;
+}
+
+.desktop-edge-toggle .el-icon {
+  font-size: 18px;
+}
+
+.desktop-edge-toggle:active,
+.desktop-edge-toggle:focus,
+.desktop-edge-toggle:focus-visible,
+.desktop-edge-toggle:hover {
+  transform: translateY(-50%) !important;
+  box-shadow: none !important;
+  border: none !important;
+  outline: none !important;
+  margin-left: -10px !important;
+}
+
+.el-button.desktop-edge-toggle[aria-label],
+.el-button.desktop-edge-toggle[aria-label]:hover,
+.el-button.desktop-edge-toggle[aria-label]:active,
+.el-button.desktop-edge-toggle[aria-label]:focus,
+.el-button.desktop-edge-toggle[aria-label]:focus-visible {
+  transform: translateY(-50%) !important;
+  transition: none !important;
+  box-shadow: none !important;
+  border: none !important;
+  background: transparent !important;
+}
+
+.app-aside .el-menu--collapse .el-menu-item {
+  margin: 6px 8px !important;
+  line-height: 40px;
+  box-sizing: border-box;
+  position: static;
+  left: auto;
+  transform: none;
+  padding: 0 !important;
+  justify-content: center;
+}
+
+.app-aside .el-menu--collapse .el-menu-item::before,
+.app-aside .el-menu--collapse .el-menu-item::after {
+  display: none !important;
+}
+
+.app-aside .el-menu--collapse .el-menu-item,
+.aside-actions.collapsed .icon-btn {
+  width: 40px;
+  min-width: 40px;
+  height: 40px;
+  border-radius: 8px !important;
+  color: var(--text) !important;
+  border: none !important;
+  background: transparent !important;
+  box-shadow: none !important;
+  backdrop-filter: none !important;
+}
+
+.app-aside .el-menu--collapse .el-menu-item > .el-tooltip__trigger {
+  width: 100% !important;
+  height: 100% !important;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  visibility: visible !important;
+  overflow: visible !important;
+}
+
+.app-aside .el-menu--collapse .el-menu-item .menu-item-inner {
+  width: 100% !important;
+  height: 100% !important;
+  display: inline-flex !important;
+  align-items: center;
+  justify-content: center;
+  visibility: visible !important;
+  overflow: visible !important;
+}
+
+.app-aside .el-menu--collapse .el-menu-item.is-active {
+  box-shadow: none !important;
+}
+
+.app-aside .el-menu--collapse .el-menu-item,
+.app-aside .el-menu--collapse .el-menu-item:hover,
+.app-aside .el-menu--collapse .el-menu-item:active,
+.app-aside .el-menu--collapse .el-menu-item.is-active {
+  background: transparent !important;
+}
+
+.app-aside .el-menu--collapse .el-menu-item .el-icon {
+  position: static;
+  left: auto;
+  top: auto;
+  transform: none;
+  margin-right: 0 !important;
+}
+
+.app-aside .el-menu--collapse .el-menu-item .el-icon,
+.aside-actions.collapsed .icon-btn .el-icon {
+  font-size: 17px;
+  filter: none;
+}
+
+@media (max-width: 900px) {
+  .app-aside.mobile-mode {
+    position: fixed;
+    left: 0;
+    top: 0;
+    bottom: 0;
+    height: 100dvh;
+    z-index: 40;
+    transform: translateX(-100%);
+    transition: none;
+    box-shadow: 0 14px 34px rgba(12, 20, 36, 0.28);
+  }
+
+  .app-aside.mobile-mode.mobile-open {
+    transform: translateX(0);
+  }
+
+  .app-aside.mobile-mode .el-menu-item {
+    margin: 6px 8px;
+  }
+
+  .app-aside.mobile-mode .el-menu {
+    max-height: calc(100dvh - 124px);
+    overflow-y: auto !important;
+  }
+
+  .app-aside.mobile-mode .aside-actions {
+    position: sticky;
+    bottom: 0;
+    background: var(--aside);
+    border-top: none;
+    display: flex;
+    flex-wrap: nowrap;
+    justify-content: space-evenly;
+    align-items: center;
+    gap: 8px;
+    min-height: 64px;
+    padding: 12px 10px max(8px, env(safe-area-inset-bottom));
+  }
+
+  .app-aside.mobile-mode .aside-actions::before {
+    content: '';
+    position: absolute;
+    left: 10px;
+    right: 10px;
+    top: 12px;
+    height: 1px;
+    background: var(--border);
+    pointer-events: none;
+  }
+
+  .app-aside.mobile-mode .aside-actions .icon-btn {
+    width: 40px;
+    min-width: 40px;
+    height: 40px;
+    border-radius: 8px !important;
+    border: none !important;
+    background: transparent !important;
+    box-shadow: none !important;
+    backdrop-filter: none !important;
+    margin: 0;
+    padding: 0;
+  }
+
+  .mobile-edge-toggle {
+    position: fixed;
+    left: 0;
+    top: 46vh;
+    z-index: 60;
+    width: 20px !important;
+    min-width: 20px !important;
+    height: 42px !important;
+    margin-left: -10px;
+    border: none !important;
+    background: transparent !important;
+    color: color-mix(in oklab, var(--text) 88%, #0f172a 12%) !important;
+    box-shadow: none !important;
+    backdrop-filter: none !important;
+    outline: none !important;
+    overflow: visible !important;
+    transition: none !important;
+    padding: 0 !important;
+    display: inline-flex !important;
+    align-items: center;
+    justify-content: center;
+  }
+
+  .mobile-edge-toggle::before,
+  .mobile-edge-toggle::after {
+    display: none !important;
+  }
+
+  .mobile-edge-toggle.el-button,
+  .mobile-edge-toggle.el-button[aria-label],
+  .mobile-edge-toggle.el-button[aria-label]:hover,
+  .mobile-edge-toggle.el-button[aria-label]:active,
+  .mobile-edge-toggle.el-button[aria-label]:focus,
+  .mobile-edge-toggle.el-button[aria-label]:focus-visible {
+    border: none !important;
+    background: transparent !important;
+    box-shadow: none !important;
+    transform: none !important;
+    transition: none !important;
+    margin-left: -10px !important;
+    outline: none !important;
+  }
+
+  .desktop-edge-toggle {
+    display: none !important;
+  }
+
+  .mobile-edge-toggle .el-icon {
+    font-size: 18px;
+  }
+
+  .aside-mask {
+    display: block;
+    position: fixed;
+    inset: 0;
+    background: rgba(5, 9, 18, 0.36);
+    backdrop-filter: blur(2px);
+    z-index: 30;
+  }
+}

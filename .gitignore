@@ -1,0 +1,39 @@
+__pycache__/
+*.pyc
+.DS_Store
+
+# frontend artifacts
+node_modules/
+frontend/dist/
+frontend/.vite/
+frontend/.env
+frontend/.env.*.local
+
+# python environments
+backend/.venv/
+.venv/
+
+# local databases
+*.db
+*.sqlite3
+
+# runtime uploads
+uploads/
+
+# local env and runtime data
+deploy/.env
+backend/data/
+backend/uploads/
+tools/
+
+# test/cache artifacts
+coverage/
+*.coverage
+htmlcov/
+
+# logs and editor caches
+*.log
+.vscode/
+.idea/
+.pytest_cache/
+.mypy_cache/

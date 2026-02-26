@@ -1,0 +1,40 @@
+services:
+  app:
+    image: ${APP_IMAGE:-ghcr.io/skinsly/ems:latest}
+    pull_policy: if_not_present
+    build:
+      context: ..
+      dockerfile: Dockerfile
+      args:
+        BUILDKIT_INLINE_CACHE: "1"
+    container_name: material-stock-app
+    environment:
+      SECRET_KEY: ${SECRET_KEY:-change-this-secret}
+      ACCESS_TOKEN_EXPIRE_MINUTES: ${ACCESS_TOKEN_EXPIRE_MINUTES:-720}
+      DATA_DIR: /app/data
+      DB_PATH: app.db
+      UPLOADS_DIR: /app/uploads
+      FRONTEND_DIST_DIR: /app/frontend-dist
+      INIT_USERNAME: ${INIT_USERNAME:-admin}
+      INIT_PASSWORD: ${INIT_PASSWORD:-admin}
+    volumes:
+      - backend_data:/app/data
+      - backend_uploads:/app/uploads
+    ports:
+      - "28888:8000"
+    healthcheck:
+      test: ["CMD-SHELL", "python -c \"import urllib.request; urllib.request.urlopen('http://127.0.0.1:8000/healthz', timeout=3)\" || exit 1"]
+      interval: 120s
+      timeout: 5s
+      start_period: 30s
+      retries: 5
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "10m"
+        max-file: "5"
+    restart: unless-stopped
+
+volumes:
+  backend_data:
+  backend_uploads:
