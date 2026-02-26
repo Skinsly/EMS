@@ -60,6 +60,28 @@ cd backend
 scripts\smoke.bat
 ```
 
+若数据库已初始化（已有管理员），执行 `smoke.bat` 前请先设置 E2E 账号环境变量：
+
+```bash
+set E2E_USERNAME=你的管理员账号
+set E2E_PASSWORD=你的管理员密码
+scripts\smoke.bat
+```
+
+也可单独执行端到端冒烟脚本：
+
+```bash
+tools\python312\python.exe scripts\e2e_smoke.py --username 你的管理员账号 --password 你的管理员密码
+```
+
+### 冒烟常见问题
+
+- `401 Unauthorized`：通常是 `E2E_USERNAME / E2E_PASSWORD` 错误，或对应账号已被修改/禁用。
+- `system already initialized; pass --username and --password`：数据库已初始化，需显式传管理员账号密码。
+- `SECRET_KEY` 未设置告警：开发环境可忽略；生产环境请在环境变量中设置固定强密钥。
+- `python / npm not recognized`：请优先使用仓库内置运行时（`tools\python312\python.exe`、`tools\node22\npm.cmd`）。
+- 前端构建失败：先在 `frontend/` 执行 `tools\node22\npm.cmd install` 再重试。
+
 发版前可执行完整冒烟（全量校验 + 全量后端测试）：
 
 ```bash

@@ -95,8 +95,7 @@ const formatUpdatedAt = (value) => {
 const formatQty = (value) => {
   const n = Number(value)
   if (!Number.isFinite(n)) return value
-  if (Number.isInteger(n)) return String(n)
-  return String(n)
+  return Number.isInteger(n) ? String(n) : n.toFixed(3).replace(/\.0+$/, '').replace(/(\.\d*?)0+$/, '$1')
 }
 
 const onResetEvent = () => {

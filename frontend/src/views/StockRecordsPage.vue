@@ -3,8 +3,8 @@
     <StockHeadBar title-class="stock-title-segment-wrap" :page="page" :total-pages="totalPages" @prev="prevPage" @next="nextPage">
       <template #actions>
         <ToolbarSearchInput v-model="keyword" placeholder="按名称/规格搜索" @enter="load" />
-        <ToolbarIconAction tooltip="删除选中" aria-label="删除选中" type="danger" :disabled="!selectedRows.length" @click="correctSelected">
-          <Delete />
+        <ToolbarIconAction tooltip="更正选中" aria-label="更正选中" type="danger" :disabled="!selectedRows.length" @click="correctSelected">
+          <Edit />
         </ToolbarIconAction>
         <ToolbarIconAction :tooltip="exportLabel" :aria-label="exportLabel" @click="download">
           <Download />
@@ -102,7 +102,7 @@
 <script setup>
 import { computed, onMounted, reactive, ref } from 'vue'
 import { ElMessage } from 'element-plus'
-import { Check, Delete, Download, Edit } from '@element-plus/icons-vue'
+import { Check, Download, Edit } from '@element-plus/icons-vue'
 import api from '../api'
 import { downloadByApi } from '../download'
 import ToolbarSearchInput from '../components/ToolbarSearchInput.vue'
@@ -141,8 +141,7 @@ const formatQty = (value) => {
   if (!text) return '0'
   const n = Number(text)
   if (!Number.isFinite(n)) return text
-  if (Number.isInteger(n)) return `${n}`
-  return `${n}`
+  return Number.isInteger(n) ? String(n) : n.toFixed(3).replace(/\.0+$/, '').replace(/(\.\d*?)0+$/, '$1')
 }
 
 const formatIndex = (indexOnPage) => String((page.value - 1) * pageSize + indexOnPage + 1).padStart(2, '0')

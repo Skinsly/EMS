@@ -24,7 +24,7 @@ if not exist "%NPM_CMD%" (
 )
 
 echo.
-echo [1/3] Backend smoke flow test...
+echo [1/4] Backend smoke flow test...
 pushd "%ROOT_DIR%\backend" >nul
 "%PYTHON_EXE%" -m pytest tests/test_smoke_flow.py -q
 if errorlevel 1 (
@@ -36,7 +36,7 @@ popd >nul
 echo [OK] Backend smoke flow test passed.
 
 echo.
-echo [2/3] Backend health smoke test...
+echo [2/4] Backend health smoke test...
 pushd "%ROOT_DIR%\backend" >nul
 "%PYTHON_EXE%" -c "from fastapi.testclient import TestClient; from app.main import app; c=TestClient(app); r=c.get('/healthz'); raise SystemExit(0 if r.status_code==200 else 1)"
 if errorlevel 1 (
@@ -48,7 +48,29 @@ popd >nul
 echo [OK] Backend health smoke test passed.
 
 echo.
-echo [3/3] Frontend build smoke...
+echo [3/4] Backend E2E smoke...
+pushd "%ROOT_DIR%" >nul
+if defined E2E_USERNAME (
+  if not defined E2E_PASSWORD (
+    echo [ERROR] E2E_USERNAME is set but E2E_PASSWORD is missing.
+    popd >nul
+    exit /b 1
+  )
+  "%PYTHON_EXE%" scripts\e2e_smoke.py --username "%E2E_USERNAME%" --password "%E2E_PASSWORD%"
+) else (
+  "%PYTHON_EXE%" scripts\e2e_smoke.py
+)
+if errorlevel 1 (
+  echo [FAIL] Backend E2E smoke failed.
+  echo Hint: if system is already initialized, set E2E_USERNAME and E2E_PASSWORD.
+  popd >nul
+  exit /b 1
+)
+popd >nul
+echo [OK] Backend E2E smoke passed.
+
+echo.
+echo [4/4] Frontend build smoke...
 pushd "%ROOT_DIR%\frontend" >nul
 set "PATH=%NODE_DIR%;%PATH%"
 call "%NPM_CMD%" run build

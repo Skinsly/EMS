@@ -78,6 +78,7 @@ class ConstructionLogCreate(BaseModel):
 
 
 class ConstructionLogUpdate(BaseModel):
+    title: str = ""
     log_date: str = ""
     weather: str = ""
     content: str = ""

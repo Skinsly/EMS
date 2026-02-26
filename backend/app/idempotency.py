@@ -1,5 +1,5 @@
 import json
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 
 from sqlalchemy import delete, select
 from sqlalchemy.orm import Session
@@ -25,7 +25,7 @@ def write_idempotency(db: Session, key: str, response: dict) -> None:
 
 def cleanup_expired_idempotency(db: Session) -> int:
     ttl = max(1, int(settings.idempotency_ttl_hours))
-    cutoff = datetime.utcnow() - timedelta(hours=ttl)
+    cutoff = datetime.now(timezone.utc).replace(tzinfo=None) - timedelta(hours=ttl)
     result = db.execute(delete(IdempotencyRecord).where(IdempotencyRecord.created_at < cutoff))
     db.commit()
     return int(result.rowcount or 0)

@@ -602,6 +602,7 @@ const save = async () => {
     let logId = editingId.value
     if (editingId.value) {
       await api.put(`/construction-logs/${editingId.value}`, {
+        title: form.log_date ? `施工日志-${form.log_date}` : '施工日志',
         log_date: form.log_date,
         weather: form.weather,
         content: form.content

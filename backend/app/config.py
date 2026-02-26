@@ -1,10 +1,12 @@
 import os
+import secrets
+import warnings
 from pathlib import Path
 
 
 class Settings:
     app_name: str = "Material Stock System"
-    secret_key: str = os.getenv("SECRET_KEY", "change-this-in-production")
+    secret_key: str = os.getenv("SECRET_KEY") or secrets.token_urlsafe(48)
     access_token_expire_minutes: int = int(os.getenv("ACCESS_TOKEN_EXPIRE_MINUTES", "720"))
     idempotency_ttl_hours: int = int(os.getenv("IDEMPOTENCY_TTL_HOURS", "168"))
     cors_origins: str = os.getenv("CORS_ORIGINS", "http://localhost:5173,http://127.0.0.1:5173")
@@ -13,6 +15,13 @@ class Settings:
     uploads_dir: str = os.getenv("UPLOADS_DIR", "uploads")
     frontend_dist_dir: str = os.getenv("FRONTEND_DIST_DIR", "frontend-dist")
     deleted_attachment_retention_days: int = int(os.getenv("DELETED_ATTACHMENT_RETENTION_DAYS", "30"))
+
+    def __init__(self) -> None:
+        if "SECRET_KEY" not in os.environ:
+            warnings.warn(
+                "[安全警告] 未设置 SECRET_KEY，当前使用启动时随机密钥。重启后登录状态会失效；生产环境请务必设置固定强密钥。",
+                stacklevel=2,
+            )
 
     @property
     def database_url(self) -> str:

@@ -6,6 +6,14 @@ import { formatDateInput } from '../utils/date'
 
 const QUICK_STOCK_DRAFT_KEY = 'quick-stock-draft'
 
+const normalizeQty = (value) => {
+  if (value === '' || value === null || typeof value === 'undefined') return ''
+  const parsed = Number(value)
+  if (!Number.isFinite(parsed)) return ''
+  const fixed = Math.round(Math.max(0.001, parsed) * 1000) / 1000
+  return Number.isInteger(fixed) ? String(fixed) : fixed.toFixed(3).replace(/\.0+$/, '').replace(/(\.\d*?)0+$/, '$1')
+}
+
 export const useStockDraftPage = (mode) => {
   const isOut = mode === 'out'
   const route = useRoute()
@@ -72,7 +80,7 @@ export const useStockDraftPage = (mode) => {
   const draftStatusText = computed(() => {
     if (commitLoading.value) return '正在入账...'
     if (draftSaving.value) return '草稿保存中...'
-    if (!rows.value.length) return isOut ? '暂无待入账草稿' : '暂无待入账草稿'
+    if (!rows.value.length) return isOut ? '暂无待出账草稿' : '暂无待入账草稿'
     if (draftSavedAt.value) return `草稿已保存（${draftSavedAt.value}），待入账 ${rows.value.length} 条`
     return `待入账 ${rows.value.length} 条`
   })
@@ -211,7 +219,7 @@ export const useStockDraftPage = (mode) => {
         row.qty === '' || row.qty === null || typeof row.qty === 'undefined'
           ? null
           : Number.isFinite(Number(row.qty))
-            ? Math.trunc(Number(row.qty))
+            ? Number(normalizeQty(row.qty))
             : null,
       remark: row.remark || ''
     }
@@ -230,10 +238,10 @@ export const useStockDraftPage = (mode) => {
     if (draftRow.value.qty !== null && draftRow.value.qty !== '' && typeof draftRow.value.qty !== 'undefined') {
       const parsed = Number(draftRow.value.qty)
       if (Number.isNaN(parsed)) {
-        ElMessage.error('数量需为整数')
+        ElMessage.error('数量需为数字')
         return
       }
-      qtyValue = Math.max(1, Math.trunc(parsed))
+      qtyValue = normalizeQty(parsed)
     }
     const nextRow = {
       date: draftRow.value.date,
@@ -350,7 +358,7 @@ export const useStockDraftPage = (mode) => {
         {
           date: today(),
           material_id: matched.id,
-          qty: Number(draft.qty) || 1,
+          qty: normalizeQty(draft.qty || 1),
           remark: ''
         }
       ]
@@ -372,7 +380,7 @@ export const useStockDraftPage = (mode) => {
         qty:
           row?.qty === '' || row?.qty === null || typeof row?.qty === 'undefined'
             ? ''
-            : Math.max(1, Math.trunc(Number(row.qty) || 1)),
+            : normalizeQty(row.qty),
         remark: `${row?.remark || ''}`
       }))
       .filter((row) => row.material_id)

@@ -8,7 +8,7 @@ import tempfile
 import time
 from urllib.parse import quote
 from contextlib import asynccontextmanager
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 from decimal import Decimal
 from io import BytesIO
 from pathlib import Path
@@ -132,6 +132,10 @@ def _safe_fs_name(value: str, fallback: str = "unnamed") -> str:
     return text or fallback
 
 
+def _utcnow_naive() -> datetime:
+    return datetime.now(timezone.utc).replace(tzinfo=None)
+
+
 def _uploads_root() -> Path:
     root = Path(settings.uploads_dir)
     root.mkdir(parents=True, exist_ok=True)
@@ -171,7 +175,7 @@ def _safe_remove_uploaded_file(file_path: str) -> bool:
 def _cleanup_deleted_attachments(db: Session, retention_days: int | None = None) -> dict:
     days = settings.deleted_attachment_retention_days if retention_days is None else retention_days
     days = max(0, int(days or 0))
-    cutoff = datetime.utcnow() - timedelta(days=days)
+    cutoff = _utcnow_naive() - timedelta(days=days)
     rows = db.scalars(
         select(Attachment)
         .where(Attachment.is_deleted.is_(True), Attachment.created_at <= cutoff)
@@ -181,14 +185,23 @@ def _cleanup_deleted_attachments(db: Session, retention_days: int | None = None)
     deleted_rows = 0
     deleted_files = 0
     for row in rows:
+        storage_key = (row.stored_name or "").strip() or (row.path or "").strip()
+        if not storage_key:
+            db.delete(row)
+            deleted_rows += 1
+            continue
+
         active_ref_count = db.scalar(
             select(func.count(Attachment.id)).where(
-                Attachment.path == row.path,
+                or_(
+                    Attachment.stored_name == storage_key,
+                    Attachment.path == storage_key,
+                ),
                 Attachment.id != row.id,
                 Attachment.is_deleted.is_(False),
             )
         )
-        if int(active_ref_count or 0) <= 0 and _safe_remove_uploaded_file(row.path):
+        if int(active_ref_count or 0) <= 0 and _safe_remove_uploaded_file(storage_key):
             deleted_files += 1
         db.delete(row)
         deleted_rows += 1
@@ -215,7 +228,7 @@ def _date8_from_text(value: str) -> str:
     digits = re.sub(r"\D", "", value or "")
     if len(digits) >= 8:
         return digits[:8]
-    return datetime.utcnow().strftime("%Y%m%d")
+    return _utcnow_naive().strftime("%Y%m%d")
 
 
 def _attachment_photo_day8(db: Session, order_type: str, order_id: int) -> str:
@@ -225,7 +238,7 @@ def _attachment_photo_day8(db: Session, order_type: str, order_id: int) -> str:
     if order_type == "machine_ledger":
         row = db.get(MachineLedger, order_id)
         return _date8_from_text((row.use_date if row else "") or "")
-    return datetime.utcnow().strftime("%Y%m%d")
+    return _utcnow_naive().strftime("%Y%m%d")
 
 
 def _photo_filename_by_rule(order_type: str, day8: str, seq: int, ext: str) -> str:
@@ -369,6 +382,16 @@ def _ensure_schema_updates() -> None:
                 """
             )
         )
+        if not has_column("machine_ledger", "spec"):
+            conn.execute(text("ALTER TABLE machine_ledger ADD COLUMN spec VARCHAR(200) NOT NULL DEFAULT ''"))
+        if not has_column("machine_ledger", "use_date"):
+            conn.execute(text("ALTER TABLE machine_ledger ADD COLUMN use_date VARCHAR(20) NOT NULL DEFAULT ''"))
+        if not has_column("machine_ledger", "shift_count"):
+            conn.execute(text("ALTER TABLE machine_ledger ADD COLUMN shift_count NUMERIC(12,3) NOT NULL DEFAULT 0"))
+        if not has_column("machine_ledger", "remark"):
+            conn.execute(text("ALTER TABLE machine_ledger ADD COLUMN remark VARCHAR(255) NOT NULL DEFAULT ''"))
+        if not has_column("machine_ledger", "created_at"):
+            conn.execute(text("ALTER TABLE machine_ledger ADD COLUMN created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP"))
 
 
 def _validate_password_strength(password: str) -> bool:
@@ -713,6 +736,9 @@ def update_construction_log(
     row = db.get(ConstructionLog, log_id)
     if not row or row.project_id != project.id:
         raise HTTPException(status_code=404, detail="施工日志不存在")
+    title = payload.title.strip()
+    if title:
+        row.title = title
     row.log_date = payload.log_date.strip()
     row.weather = payload.weather.strip()
     row.content = payload.content.strip()
@@ -1072,47 +1098,54 @@ def create_stock_out(
     if not order:
         raise HTTPException(status_code=500, detail="生成出库单号失败，请重试")
 
-    for item in payload.items:
-        material = db.get(Material, item.material_id)
-        if not material or not material.is_active:
-            raise HTTPException(status_code=400, detail=f"材料不可用: {item.material_id}")
-        if material.project_id != project.id:
-            raise HTTPException(status_code=400, detail=f"材料不属于当前工程: {item.material_id}")
+    try:
+        for item in payload.items:
+            material = db.get(Material, item.material_id)
+            if not material or not material.is_active:
+                raise HTTPException(status_code=400, detail=f"材料不可用: {item.material_id}")
+            if material.project_id != project.id:
+                raise HTTPException(status_code=400, detail=f"材料不属于当前工程: {item.material_id}")
 
-        inv = _inventory_row(db, item.material_id, warehouse.id)
-        delta = str(item.qty)
-        updated = db.execute(
-            text(
-                "UPDATE inventory "
-                "SET qty = qty - :delta, updated_at = CURRENT_TIMESTAMP "
-                "WHERE id = :inv_id AND qty >= :delta"
-            ),
-            {"delta": delta, "inv_id": inv.id},
-        )
-        if int(updated.rowcount or 0) <= 0:
-            raise HTTPException(status_code=400, detail=f"库存不足: {material.name}")
-
-        detail = StockOutItem(order_id=order.id, material_id=item.material_id, qty=item.qty, remark=item.remark)
-        db.add(detail)
-        db.flush()
-
-        inv_qty = db.scalar(select(Inventory.qty).where(Inventory.id == inv.id))
-        current_qty = Decimal(inv_qty or "0")
-        db.add(
-            StockMovement(
-                project_id=project.id,
-                material_id=item.material_id,
-                warehouse_id=warehouse.id,
-                movement_type="out",
-                order_type="stock_out",
-                order_id=order.id,
-                item_id=detail.id,
-                qty=item.qty,
-                balance_after=current_qty,
-                operator_name=order.operator_name,
-                note=order.note,
+            inv = _inventory_row(db, item.material_id, warehouse.id)
+            delta = str(item.qty)
+            updated = db.execute(
+                text(
+                    "UPDATE inventory "
+                    "SET qty = qty - :delta, updated_at = CURRENT_TIMESTAMP "
+                    "WHERE id = :inv_id AND qty >= :delta"
+                ),
+                {"delta": delta, "inv_id": inv.id},
             )
-        )
+            if int(updated.rowcount or 0) <= 0:
+                raise HTTPException(status_code=400, detail=f"库存不足: {material.name}")
+
+            detail = StockOutItem(order_id=order.id, material_id=item.material_id, qty=item.qty, remark=item.remark)
+            db.add(detail)
+            db.flush()
+
+            inv_qty = db.scalar(select(Inventory.qty).where(Inventory.id == inv.id))
+            current_qty = Decimal(inv_qty or "0")
+            db.add(
+                StockMovement(
+                    project_id=project.id,
+                    material_id=item.material_id,
+                    warehouse_id=warehouse.id,
+                    movement_type="out",
+                    order_type="stock_out",
+                    order_id=order.id,
+                    item_id=detail.id,
+                    qty=item.qty,
+                    balance_after=current_qty,
+                    operator_name=order.operator_name,
+                    note=order.note,
+                )
+            )
+    except HTTPException:
+        db.rollback()
+        raise
+    except Exception as exc:
+        db.rollback()
+        raise HTTPException(status_code=500, detail="出库失败，请重试") from exc
 
     db.commit()
     result = {"id": order.id, "order_no": order.order_no}
@@ -1652,12 +1685,15 @@ def inventory_list(
     _: User = Depends(_require_user),
     project: Project = Depends(_require_project),
 ) -> list[dict]:
-    rows = db.scalars(select(Inventory).order_by(Inventory.id.desc())).all()
+    rows = db.scalars(
+        select(Inventory)
+        .join(Material, Inventory.material_id == Material.id)
+        .where(Material.project_id == project.id, Material.is_active.is_(True))
+        .order_by(Inventory.id.desc())
+    ).all()
     result = []
     kw = keyword.strip().lower()
     for r in rows:
-        if r.material.project_id != project.id:
-            continue
         if kw and kw not in (f"{r.material.name} {r.material.spec}".lower()):
             continue
         result.append(
@@ -1861,7 +1897,12 @@ def export_inventory(
     _: User = Depends(_require_user),
     project: Project = Depends(_require_project),
 ) -> StreamingResponse:
-    rows = db.scalars(select(Inventory).order_by(Inventory.id.desc())).all()
+    rows = db.scalars(
+        select(Inventory)
+        .join(Material, Inventory.material_id == Material.id)
+        .where(Material.project_id == project.id, Material.is_active.is_(True))
+        .order_by(Inventory.id.desc())
+    ).all()
     stream = io.StringIO()
     stream.write('<html><head><meta charset="utf-8"></head><body>')
     stream.write('<table border="1" cellspacing="0" cellpadding="0" style="border-collapse:collapse;table-layout:auto;width:100%;">')
@@ -1872,8 +1913,6 @@ def export_inventory(
     stream.write('</tr>')
 
     for r in rows:
-        if r.material.project_id != project.id:
-            continue
         row_values = [
             r.material.name,
             r.material.spec,
@@ -1903,14 +1942,24 @@ def export_database(_: User = Depends(_require_user)) -> FileResponse:
 
 
 @app.post("/api/bootstrap/import-package")
-async def import_bootstrap_package(file: UploadFile = File(...)) -> dict:
+async def import_bootstrap_package(
+    file: UploadFile = File(...),
+    credentials: HTTPAuthorizationCredentials | None = Depends(security),
+) -> dict:
     _ensure_dirs()
     db_path = _resolve_db_path()
 
     try:
         with Session(engine) as db:
             if is_initialized(db):
-                raise HTTPException(status_code=400, detail="系统已初始化，禁止导入数据包")
+                if not credentials:
+                    raise HTTPException(status_code=401, detail="系统已初始化，导入数据包需登录")
+                username = decode_access_token(credentials.credentials)
+                if not username:
+                    raise HTTPException(status_code=401, detail="Token 无效")
+                user = db.scalar(select(User).where(User.username == username, User.is_active.is_(True)))
+                if not user:
+                    raise HTTPException(status_code=401, detail="用户不存在")
     except HTTPException:
         raise
     except Exception:

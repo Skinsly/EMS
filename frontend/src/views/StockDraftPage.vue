@@ -110,7 +110,7 @@
           </div>
         </el-form-item>
         <el-form-item>
-          <el-input-number v-model="draftRow.qty" :min="1" :precision="0" :step="1" :controls="false" placeholder="数量" style="width: 100%" />
+          <el-input-number v-model="draftRow.qty" :min="0.001" :precision="3" :step="0.1" :controls="false" placeholder="数量" style="width: 100%" />
         </el-form-item>
         <el-form-item>
           <el-input v-model="draftRow.remark" placeholder="备注" />
