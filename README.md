@@ -24,6 +24,7 @@
 
 ```bash
 cp deploy/.env.example deploy/.env
+# 请先编辑 deploy/.env，设置强 SECRET_KEY
 docker compose --env-file deploy/.env -f deploy/docker-compose.yml up -d --build
 ```
 
@@ -44,6 +45,15 @@ python -m pytest tests -q
 cd ../frontend
 npm ci
 npm run build
+```
+
+Windows 使用仓库内置 Node 时，请先临时加入 PATH（避免 `node not recognized`）：
+
+```bash
+set PATH=%CD%\tools\node22;%PATH%
+cd frontend
+tools\node22\npm.cmd ci
+tools\node22\npm.cmd run build
 ```
 
 若系统 `python` 命令不可用，可使用仓库内置 Python（Windows）：

@@ -9,14 +9,12 @@ services:
         BUILDKIT_INLINE_CACHE: "1"
     container_name: material-stock-app
     environment:
-      SECRET_KEY: ${SECRET_KEY:-change-this-secret}
+      SECRET_KEY: ${SECRET_KEY:?SECRET_KEY is required}
       ACCESS_TOKEN_EXPIRE_MINUTES: ${ACCESS_TOKEN_EXPIRE_MINUTES:-720}
       DATA_DIR: /app/data
       DB_PATH: app.db
       UPLOADS_DIR: /app/uploads
       FRONTEND_DIST_DIR: /app/frontend-dist
-      INIT_USERNAME: ${INIT_USERNAME:-admin}
-      INIT_PASSWORD: ${INIT_PASSWORD:-admin}
     volumes:
       - backend_data:/app/data
       - backend_uploads:/app/uploads
