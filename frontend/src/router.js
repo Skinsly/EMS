@@ -32,8 +32,8 @@ const router = createRouter({
 })
 
 router.beforeEach((to) => {
-  const token = localStorage.getItem('token')
-  const projectId = localStorage.getItem('projectId')
+  const token = sessionStorage.getItem('token')
+  const projectId = sessionStorage.getItem('projectId')
   if (to.path !== '/login' && !token) {
     return '/login'
   }
