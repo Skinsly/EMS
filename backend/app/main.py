@@ -82,6 +82,16 @@ from .services.stock_flow import (
     order_no as _order_no,
     stock_draft_type_or_400 as _stock_draft_type_or_400,
 )
+from .services.logs_and_ledger import (
+    create_construction_log as _create_construction_log,
+    delete_construction_log as _delete_construction_log,
+    list_construction_logs as _list_construction_logs,
+    machine_ledger_create as _machine_ledger_create,
+    machine_ledger_delete as _machine_ledger_delete,
+    machine_ledger_list as _machine_ledger_list,
+    machine_ledger_update as _machine_ledger_update,
+    update_construction_log as _update_construction_log,
+)
 from .services.attachments import (
     ALLOWED_CONTENT_TYPES,
     IMAGE_CONTENT_TYPES,
@@ -412,21 +422,7 @@ def create_construction_log(
     current_user: User = Depends(_require_user),
     project: Project = Depends(_require_project),
 ) -> dict:
-    title = payload.title.strip()
-    if not title:
-        raise HTTPException(status_code=400, detail="日志标题不能为空")
-    row = ConstructionLog(
-        project_id=project.id,
-        log_date=payload.log_date.strip(),
-        title=title,
-        weather=payload.weather.strip(),
-        content=payload.content.strip(),
-        created_by=current_user.username,
-    )
-    db.add(row)
-    db.commit()
-    db.refresh(row)
-    return {"id": row.id}
+    return _create_construction_log(payload, db, current_user, project)
 
 
 @app.get("/api/construction-logs")
@@ -435,20 +431,7 @@ def list_construction_logs(
     _: User = Depends(_require_user),
     project: Project = Depends(_require_project),
 ) -> list[dict]:
-    rows = db.scalars(
-        select(ConstructionLog).where(ConstructionLog.project_id == project.id).order_by(ConstructionLog.id.desc())
-    ).all()
-    return [
-        {
-            "id": r.id,
-            "log_date": r.log_date,
-            "title": r.title,
-            "weather": r.weather,
-            "content": r.content,
-            "created_at": r.created_at.isoformat(),
-        }
-        for r in rows
-    ]
+    return _list_construction_logs(db, project)
 
 
 @app.put("/api/construction-logs/{log_id}")
@@ -459,17 +442,7 @@ def update_construction_log(
     _: User = Depends(_require_user),
     project: Project = Depends(_require_project),
 ) -> dict:
-    row = db.get(ConstructionLog, log_id)
-    if not row or row.project_id != project.id:
-        raise HTTPException(status_code=404, detail="施工日志不存在")
-    title = payload.title.strip()
-    if title:
-        row.title = title
-    row.log_date = payload.log_date.strip()
-    row.weather = payload.weather.strip()
-    row.content = payload.content.strip()
-    db.commit()
-    return {"ok": True}
+    return _update_construction_log(log_id, payload, db, project)
 
 
 @app.delete("/api/construction-logs/{log_id}")
@@ -479,28 +452,7 @@ def delete_construction_log(
     _: User = Depends(_require_user),
     project: Project = Depends(_require_project),
 ) -> dict:
-    row = db.get(ConstructionLog, log_id)
-    if not row or row.project_id != project.id:
-        raise HTTPException(status_code=404, detail="施工日志不存在")
-
-    attachments = db.scalars(
-        select(Attachment).where(
-            Attachment.order_type == "construction_log",
-            Attachment.order_id == log_id,
-            Attachment.is_deleted.is_(False),
-        )
-    ).all()
-    attachment_paths = [item.path for item in attachments]
-    for item in attachments:
-        item.is_deleted = True
-
-    db.delete(row)
-    db.commit()
-
-    for file_path in attachment_paths:
-        _safe_remove_uploaded_file(file_path)
-
-    return {"ok": True}
+    return _delete_construction_log(log_id, db, project)
 
 
 @app.post("/api/progress-plans")
@@ -1090,27 +1042,7 @@ def machine_ledger_list(
     _: User = Depends(_require_user),
     project: Project = Depends(_require_project),
 ) -> list[dict]:
-    rows = db.scalars(
-        select(MachineLedger)
-        .where(MachineLedger.project_id == project.id)
-        .order_by(MachineLedger.id.desc())
-    ).all()
-    kw = keyword.strip().lower()
-    result: list[dict] = []
-    for row in rows:
-        if kw and kw not in f"{row.name} {row.spec} {row.remark}".lower():
-            continue
-        result.append(
-            {
-                "id": row.id,
-                "name": row.name,
-                "spec": row.spec,
-                "use_date": row.use_date,
-                "shift_count": _qty_text(Decimal(row.shift_count)),
-                "remark": row.remark,
-            }
-        )
-    return result
+    return _machine_ledger_list(keyword, db, project)
 
 
 @app.post("/api/machine-ledger")
@@ -1120,31 +1052,7 @@ def machine_ledger_create(
     _: User = Depends(_require_user),
     project: Project = Depends(_require_project),
 ) -> dict:
-    name = f"{payload.get('name', '')}".strip()
-    if not name:
-        raise HTTPException(status_code=400, detail="机械名称不能为空")
-    spec = f"{payload.get('spec', '')}".strip()
-    use_date = f"{payload.get('use_date', '')}".strip()
-    remark = f"{payload.get('remark', '')}".strip()
-    try:
-        shift_count = Decimal(str(payload.get("shift_count", "0") or "0"))
-    except Exception as e:
-        raise HTTPException(status_code=400, detail="台班格式不正确") from e
-    if shift_count < Decimal("0"):
-        raise HTTPException(status_code=400, detail="台班不能小于0")
-
-    row = MachineLedger(
-        project_id=project.id,
-        name=name,
-        spec=spec,
-        use_date=use_date,
-        shift_count=shift_count,
-        remark=remark,
-    )
-    db.add(row)
-    db.commit()
-    db.refresh(row)
-    return {"id": row.id}
+    return _machine_ledger_create(payload, db, project)
 
 
 @app.put("/api/machine-ledger/{row_id}")
@@ -1155,26 +1063,7 @@ def machine_ledger_update(
     _: User = Depends(_require_user),
     project: Project = Depends(_require_project),
 ) -> dict:
-    row = db.get(MachineLedger, row_id)
-    if not row or row.project_id != project.id:
-        raise HTTPException(status_code=404, detail="记录不存在")
-
-    name = f"{payload.get('name', '')}".strip()
-    if not name:
-        raise HTTPException(status_code=400, detail="机械名称不能为空")
-    row.name = name
-    row.spec = f"{payload.get('spec', '')}".strip()
-    row.use_date = f"{payload.get('use_date', '')}".strip()
-    row.remark = f"{payload.get('remark', '')}".strip()
-    try:
-        row.shift_count = Decimal(str(payload.get("shift_count", "0") or "0"))
-    except Exception as e:
-        raise HTTPException(status_code=400, detail="台班格式不正确") from e
-    if row.shift_count < Decimal("0"):
-        raise HTTPException(status_code=400, detail="台班不能小于0")
-
-    db.commit()
-    return {"ok": True}
+    return _machine_ledger_update(row_id, payload, db, project)
 
 
 @app.post("/api/machine-ledger/delete")
@@ -1184,53 +1073,7 @@ def machine_ledger_delete(
     _: User = Depends(_require_user),
     project: Project = Depends(_require_project),
 ) -> dict:
-    raw_ids = payload.get("ids") or []
-    ids: list[int] = []
-    for v in raw_ids:
-        try:
-            n = int(v)
-        except Exception:
-            continue
-        if n > 0:
-            ids.append(n)
-    if not ids:
-        raise HTTPException(status_code=400, detail="请选择要删除的记录")
-
-    rows = db.scalars(
-        select(MachineLedger).where(
-            and_(
-                MachineLedger.project_id == project.id,
-                MachineLedger.id.in_(ids),
-            )
-        )
-    ).all()
-
-    target_ids = [row.id for row in rows]
-    attachment_paths: list[str] = []
-    if target_ids:
-        attachments = db.scalars(
-            select(Attachment).where(
-                and_(
-                    Attachment.order_type == "machine_ledger",
-                    Attachment.order_id.in_(target_ids),
-                    Attachment.is_deleted.is_(False),
-                )
-            )
-        ).all()
-        attachment_paths = [item.path for item in attachments if item.path]
-        for item in attachments:
-            item.is_deleted = True
-
-    deleted = 0
-    for row in rows:
-        db.delete(row)
-        deleted += 1
-    db.commit()
-
-    for file_path in attachment_paths:
-        _safe_remove_uploaded_file(file_path)
-
-    return {"ok": True, "deleted": deleted}
+    return _machine_ledger_delete(payload, db, project)
 
 
 @app.post("/api/inventory/delete")
