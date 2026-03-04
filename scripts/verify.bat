@@ -26,7 +26,19 @@ if not exist "%NPM_CMD%" (
 )
 
 echo.
-echo [1/4] Backend tests...
+echo [1/5] Backend lint...
+pushd "%ROOT_DIR%\backend" >nul
+"%PYTHON_EXE%" -m ruff check app tests
+if errorlevel 1 (
+  echo [FAIL] Backend lint failed.
+  popd >nul
+  exit /b 1
+)
+popd >nul
+echo [OK] Backend lint passed.
+
+echo.
+echo [2/5] Backend tests...
 pushd "%ROOT_DIR%\backend" >nul
 "%PYTHON_EXE%" -m pytest -q
 if errorlevel 1 (
@@ -38,7 +50,7 @@ popd >nul
 echo [OK] Backend tests passed.
 
 echo.
-echo [2/4] Backend health smoke test...
+echo [3/5] Backend health smoke test...
 pushd "%ROOT_DIR%\backend" >nul
 "%PYTHON_EXE%" -c "from fastapi.testclient import TestClient; from app.main import app; c=TestClient(app); r=c.get('/healthz'); raise SystemExit(0 if r.status_code==200 else 1)"
 if errorlevel 1 (
@@ -50,7 +62,7 @@ popd >nul
 echo [OK] Backend health smoke test passed.
 
 echo.
-echo [3/4] Frontend install (npm install)...
+echo [4/5] Frontend install (npm install)...
 pushd "%ROOT_DIR%\frontend" >nul
 set "PATH=%NODE_DIR%;%PATH%"
 call "%NPM_CMD%" install
@@ -62,7 +74,7 @@ if errorlevel 1 (
 echo [OK] Frontend dependencies installed.
 
 echo.
-echo [4/4] Frontend build...
+echo [5/5] Frontend build...
 call "%NPM_CMD%" run build
 if errorlevel 1 (
   echo [FAIL] Frontend build failed.

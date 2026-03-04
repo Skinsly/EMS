@@ -11,7 +11,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse, StreamingResponse
 from fastapi.security import HTTPAuthorizationCredentials
 from fastapi.staticfiles import StaticFiles
-from sqlalchemy import and_, case, delete, func, literal, or_, select, text, union_all
+from sqlalchemy import and_, case, func, literal, or_, select, text, union_all
 from sqlalchemy.orm import Session
 
 from .config import settings
@@ -34,7 +34,6 @@ from .models import (
     ProgressPlanItem,
     StockInItem,
     StockInOrder,
-    StockMovement,
     StockDraft,
     StockOutItem,
     StockOutOrder,
@@ -112,9 +111,7 @@ from .services.attachments import (
     photo_filename_by_rule as _photo_filename_by_rule,
     resolve_attachment_disk_path as _resolve_attachment_disk_path,
     safe_fs_name as _safe_fs_name,
-    safe_remove_uploaded_file as _safe_remove_uploaded_file,
     target_project_id_for_attachment as _target_project_id_for_attachment,
-    uploads_root as _uploads_root,
 )
 from .security import create_access_token, get_password_hash, verify_password
 

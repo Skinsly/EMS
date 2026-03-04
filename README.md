@@ -42,6 +42,7 @@ docker compose --env-file deploy/.env -f deploy/docker-compose.yml up -d --build
 # 后端测试
 cd backend
 python -m pip install -r requirements-dev.txt
+python -m ruff check app tests
 python -m pytest tests -q
 
 # 前端构建
