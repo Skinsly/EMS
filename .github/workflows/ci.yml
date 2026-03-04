@@ -6,9 +6,21 @@ on:
   push:
     branches: ["main"]
 
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
 jobs:
-  backend-test:
+  backend-checks:
     runs-on: ubuntu-latest
+    timeout-minutes: 20
+    strategy:
+      fail-fast: false
+      matrix:
+        check: [lint, test]
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -17,6 +29,8 @@ jobs:
         uses: actions/setup-python@v5
         with:
           python-version: "3.12"
+          cache: "pip"
+          cache-dependency-path: backend/requirements-dev.txt
 
       - name: Install backend deps
         run: |
@@ -24,17 +38,18 @@ jobs:
           pip install -r backend/requirements-dev.txt
 
       - name: Run backend lint
-        run: |
-          ruff check app tests
+        if: matrix.check == 'lint'
+        run: ruff check app tests
         working-directory: backend
 
       - name: Run backend tests
-        run: |
-          pytest tests -q
+        if: matrix.check == 'test'
+        run: pytest tests -q
         working-directory: backend
 
   frontend-build:
     runs-on: ubuntu-latest
+    timeout-minutes: 20
     steps:
       - name: Checkout
         uses: actions/checkout@v4
