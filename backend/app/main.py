@@ -3,7 +3,6 @@ import re
 from urllib.parse import quote
 from contextlib import asynccontextmanager
 from datetime import datetime
-from decimal import Decimal
 from pathlib import Path
 
 from fastapi import Body, Depends, FastAPI, File, Header, HTTPException, Query, UploadFile
@@ -94,6 +93,7 @@ from .services.materials_inventory import (
     update_material as _update_material,
 )
 from .services.projects import delete_project_cascade as _delete_project_cascade
+from .utils.number_format import dec_fixed_3
 from .services.attachments import (
     ALLOWED_CONTENT_TYPES,
     IMAGE_CONTENT_TYPES,
@@ -214,10 +214,6 @@ def _validate_password_strength(password: str) -> bool:
 
 
 DELETE_PROJECT_ACK_PHRASE = "我已知晓删除后不可恢复"
-
-
-def _dec(v: Decimal) -> str:
-    return f"{v:.3f}"
 
 
 @app.post("/api/auth/login", response_model=TokenResponse)
@@ -765,7 +761,7 @@ def list_stock_records(
                 "specs_summary": "、".join([x for x in (row.get("specs_summary") or "").split(",") if x][:3]) + ("..." if len([x for x in (row.get("specs_summary") or "").split(",") if x]) > 3 else ""),
                 "unit": row.get("unit") or "",
                 "item_count": int(row.get("item_count") or 0),
-                "total_qty": _dec(Decimal(str(row.get("total_qty") or "0"))),
+                "total_qty": dec_fixed_3(row.get("total_qty") or "0"),
             }
         )
 
@@ -861,7 +857,7 @@ def stock_record_detail(
                 "material_name": material.name if material else "",
                 "material_spec": material.spec if material else "",
                 "material_unit": material.unit if material else "",
-                "qty": _dec(Decimal(item.qty)),
+                "qty": dec_fixed_3(item.qty),
                 "remark": item.remark or "",
             }
         )

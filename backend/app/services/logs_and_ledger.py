@@ -7,6 +7,7 @@ from sqlalchemy.orm import Session
 from ..models import Attachment, ConstructionLog, MachineLedger, Project, User
 from ..schemas import ConstructionLogCreate, ConstructionLogUpdate
 from .attachments import safe_remove_uploaded_file
+from ..utils.number_format import dec_trimmed
 
 
 def create_construction_log(payload: ConstructionLogCreate, db: Session, current_user: User, project: Project) -> dict:
@@ -100,7 +101,7 @@ def machine_ledger_list(keyword: str, db: Session, project: Project) -> list[dic
                 "name": row.name,
                 "spec": row.spec,
                 "use_date": row.use_date,
-                "shift_count": _qty_text(Decimal(row.shift_count)),
+                "shift_count": dec_trimmed(row.shift_count),
                 "remark": row.remark,
             }
         )
@@ -206,10 +207,3 @@ def machine_ledger_delete(payload: dict, db: Session, project: Project) -> dict:
         safe_remove_uploaded_file(file_path)
 
     return {"ok": True, "deleted": deleted}
-
-
-def _qty_text(value: Decimal) -> str:
-    text = format(value, "f")
-    if "." in text:
-        text = text.rstrip("0").rstrip(".")
-    return text or "0"

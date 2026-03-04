@@ -1,5 +1,4 @@
 from datetime import datetime
-from decimal import Decimal
 
 from fastapi import HTTPException
 from sqlalchemy import select
@@ -7,6 +6,7 @@ from sqlalchemy.orm import Session
 
 from ..models import Inventory, Material, Project
 from ..schemas import InventoryDeleteRequest, MaterialCreate, MaterialDeleteRequest, MaterialUpdate
+from ..utils.number_format import dec_fixed_3
 
 
 def create_material(payload: MaterialCreate, db: Session, project: Project) -> dict:
@@ -98,7 +98,7 @@ def inventory_list(keyword: str, db: Session, project: Project) -> list[dict]:
                 "name": row.material.name,
                 "spec": row.material.spec,
                 "unit": row.material.unit,
-                "qty": _dec(Decimal(row.qty)),
+                "qty": dec_fixed_3(row.qty),
                 "updated_at": row.updated_at.isoformat() if row.updated_at else "",
             }
         )
@@ -133,7 +133,3 @@ def delete_inventory_rows(
         deleted += 1
     db.commit()
     return {"ok": True, "deleted": deleted}
-
-
-def _dec(value: Decimal) -> str:
-    return f"{value:.3f}"

@@ -1,17 +1,10 @@
 import html
 import io
-from decimal import Decimal
 
 from fastapi.responses import StreamingResponse
 
 from ..models import Inventory, MachineLedger
-
-
-def _qty_text(value: Decimal) -> str:
-    text = format(value, "f")
-    if "." in text:
-        text = text.rstrip("0").rstrip(".")
-    return text or "0"
+from ..utils.number_format import dec_fixed_3, dec_trimmed
 
 
 def build_stock_records_export(rows: list[dict], kind: str) -> StreamingResponse:
@@ -26,7 +19,7 @@ def build_stock_records_export(rows: list[dict], kind: str) -> StreamingResponse
     stream.write('</tr>')
 
     for idx, row in enumerate(rows, start=1):
-        qty_text = _qty_text(Decimal(str(row.get("total_qty") or "0")))
+        qty_text = dec_trimmed(row.get("total_qty") or "0")
         row_values = [
             idx,
             (row.get("created_at") or "").replace("T", " ")[:10],
@@ -60,7 +53,7 @@ def build_inventory_export(rows: list[Inventory]) -> StreamingResponse:
         row_values = [
             row.material.name,
             row.material.spec,
-            f"{Decimal(row.qty):.3f}",
+            dec_fixed_3(row.qty),
             row.material.unit,
             row.updated_at.strftime("%Y-%m-%d %H:%M") if row.updated_at else "",
         ]
@@ -99,7 +92,7 @@ def build_machine_ledger_export(rows: list[MachineLedger], keyword: str = "") ->
             row.use_date or "",
             row.name,
             row.spec,
-            _qty_text(Decimal(row.shift_count)) if row.shift_count is not None else "",
+            dec_trimmed(row.shift_count) if row.shift_count is not None else "",
             row.remark,
         ]
         stream.write('<tr>')
