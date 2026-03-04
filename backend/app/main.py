@@ -14,11 +14,10 @@ from io import BytesIO
 from pathlib import Path
 from uuid import uuid4
 
-from fastapi import Body, Depends, FastAPI, File, HTTPException, Query, UploadFile
-from fastapi import Header
+from fastapi import Body, Depends, FastAPI, File, Header, HTTPException, Query, UploadFile
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse, StreamingResponse
-from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
+from fastapi.security import HTTPAuthorizationCredentials
 from fastapi.staticfiles import StaticFiles
 from PIL import Image, ImageOps, UnidentifiedImageError
 from sqlalchemy import and_, case, delete, func, literal, or_, select, text, union_all
@@ -28,6 +27,13 @@ from sqlalchemy.orm import Session
 from .config import settings
 from .bootstrap import create_initial_admin, is_initialized
 from .database import Base, engine, get_db
+from .dependencies import (
+    is_admin_user as _is_admin_user,
+    require_admin as _require_admin,
+    require_project as _require_project,
+    require_user as _require_user,
+    security,
+)
 from .idempotency import cleanup_expired_idempotency, read_idempotency, write_idempotency
 from .models import (
     Attachment,
@@ -82,7 +88,6 @@ async def lifespan(_: FastAPI):
 
 
 app = FastAPI(title=settings.app_name, lifespan=lifespan)
-security = HTTPBearer(auto_error=False)
 
 
 def _cors_origins() -> list[str]:
@@ -439,37 +444,6 @@ def _validate_password_strength(password: str) -> bool:
 DELETE_PROJECT_ACK_PHRASE = "我已知晓删除后不可恢复"
 
 
-def _require_user(
-    credentials: HTTPAuthorizationCredentials = Depends(security),
-    db: Session = Depends(get_db),
-) -> User:
-    if not credentials:
-        raise HTTPException(status_code=401, detail="未登录")
-
-    username = decode_access_token(credentials.credentials)
-    if not username:
-        raise HTTPException(status_code=401, detail="Token 无效")
-
-    user = db.scalar(select(User).where(User.username == username, User.is_active.is_(True)))
-    if not user:
-        raise HTTPException(status_code=401, detail="用户不存在")
-    return user
-
-
-def _is_admin_user(db: Session, user: User) -> bool:
-    first_user_id = db.scalar(select(User.id).where(User.is_active.is_(True)).order_by(User.id.asc()).limit(1))
-    return bool(first_user_id and int(first_user_id) == int(user.id))
-
-
-def _require_admin(
-    current_user: User = Depends(_require_user),
-    db: Session = Depends(get_db),
-) -> User:
-    if not _is_admin_user(db, current_user):
-        raise HTTPException(status_code=403, detail="仅管理员可执行此操作")
-    return current_user
-
-
 def _order_no(prefix: str, db: Session, order_model) -> str:
     date_part = datetime.now().strftime('%Y%m%d')
     base = f"{prefix}{date_part}"
@@ -495,22 +469,6 @@ def _qty_text(v: Decimal) -> str:
     if "." in text:
         text = text.rstrip("0").rstrip(".")
     return text or "0"
-
-
-def _require_project(
-    db: Session = Depends(get_db),
-    x_project_id: str | None = Header(default=None),
-) -> Project:
-    if not x_project_id:
-        raise HTTPException(status_code=400, detail="请先选择工程")
-    try:
-        project_id = int(x_project_id)
-    except ValueError as e:
-        raise HTTPException(status_code=400, detail="工程参数无效") from e
-    project = db.get(Project, project_id)
-    if not project or not project.is_active:
-        raise HTTPException(status_code=400, detail="工程不存在或已停用")
-    return project
 
 
 def _inventory_row(db: Session, material_id: int, warehouse_id: int) -> Inventory:
