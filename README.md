@@ -28,8 +28,8 @@ cp deploy/.env.example deploy/.env
 docker compose --env-file deploy/.env -f deploy/docker-compose.yml up -d --build
 ```
 
-- 首次部署或执行过 `down -v` 后，Compose 会先运行 `init-perms` 初始化容器，自动修复数据卷权限（默认 `10001:10001`），再启动主服务。
-- 如需与宿主机权限对齐，可在 `deploy/.env` 中调整 `APP_UID / APP_GID`。
+- 首次部署或执行过 `down -v` 后，应用容器启动时会自动初始化 `/app/data`、`/app/uploads` 权限后再以非 root 身份运行，无需额外执行初始化命令。
+- 在 DPanel/FNOS 仅通过 Compose 启动也可生效；如需固定 UID/GID，可在 `deploy/.env` 中调整 `APP_UID / APP_GID` 并重建镜像。
 
 - 访问地址：`http://<服务器IP>:28888`
 - 首次启动无默认账号：请在登录页完成管理员初始化（账号至少 3 位，密码至少 8 位且包含字母和数字）

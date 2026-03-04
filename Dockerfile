@@ -26,13 +26,15 @@ RUN --mount=type=cache,target=/root/.cache/pip pip install --no-cache-dir -r /ap
 
 COPY backend/app /app/app
 COPY --from=frontend-builder /frontend/dist /app/frontend-dist
+COPY docker-entrypoint.sh /app/docker-entrypoint.sh
 
 RUN mkdir -p /app/data /app/uploads \
-    && chown -R appuser:appgroup /app
+    && chown -R appuser:appgroup /app \
+    && chmod +x /app/docker-entrypoint.sh
 
 EXPOSE 8000
 
-USER appuser
+ENTRYPOINT ["/app/docker-entrypoint.sh"]
 
 HEALTHCHECK --interval=120s --timeout=5s --start-period=30s --retries=5 \
   CMD python -c "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8000/healthz', timeout=3)" || exit 1
