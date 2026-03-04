@@ -22,7 +22,7 @@ from ..models import (
     Warehouse,
 )
 from ..schemas import StockInCreate, StockOrderItemInput, StockOutCreate
-from ..utils.text import normalized_lower
+from ..utils.text import normalized_lower, payload_text
 
 
 def order_no(prefix: str, db: Session, order_model) -> str:
@@ -332,8 +332,8 @@ def commit_stock_draft(draft_type: str, db: Session, current_user: User, project
 
 def correct_stock_record(payload: dict, db: Session, current_user: User, project: Project) -> dict:
     kind = normalized_lower(payload.get("record_type"))
-    order_no_value = f"{payload.get('order_no', '')}".strip()
-    reason = f"{payload.get('reason', '')}".strip()
+    order_no_value = payload_text(payload, "order_no")
+    reason = payload_text(payload, "reason")
     if kind not in {"in", "out"}:
         raise HTTPException(status_code=400, detail="记录类型无效")
     if not order_no_value:

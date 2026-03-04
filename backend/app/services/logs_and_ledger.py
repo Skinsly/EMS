@@ -9,7 +9,7 @@ from ..schemas import ConstructionLogCreate, ConstructionLogUpdate
 from .attachments import safe_remove_uploaded_file
 from ..utils.id_parse import parse_positive_int_ids
 from ..utils.number_format import dec_trimmed
-from ..utils.text import normalized_lower
+from ..utils.text import normalized_lower, payload_text
 
 
 def create_construction_log(payload: ConstructionLogCreate, db: Session, current_user: User, project: Project) -> dict:
@@ -111,12 +111,12 @@ def machine_ledger_list(keyword: str, db: Session, project: Project) -> list[dic
 
 
 def machine_ledger_create(payload: dict, db: Session, project: Project) -> dict:
-    name = f"{payload.get('name', '')}".strip()
+    name = payload_text(payload, "name")
     if not name:
         raise HTTPException(status_code=400, detail="机械名称不能为空")
-    spec = f"{payload.get('spec', '')}".strip()
-    use_date = f"{payload.get('use_date', '')}".strip()
-    remark = f"{payload.get('remark', '')}".strip()
+    spec = payload_text(payload, "spec")
+    use_date = payload_text(payload, "use_date")
+    remark = payload_text(payload, "remark")
     shift_count = _parse_shift_count(payload.get("shift_count", "0"))
 
     row = MachineLedger(
@@ -138,13 +138,13 @@ def machine_ledger_update(row_id: int, payload: dict, db: Session, project: Proj
     if not row or row.project_id != project.id:
         raise HTTPException(status_code=404, detail="记录不存在")
 
-    name = f"{payload.get('name', '')}".strip()
+    name = payload_text(payload, "name")
     if not name:
         raise HTTPException(status_code=400, detail="机械名称不能为空")
     row.name = name
-    row.spec = f"{payload.get('spec', '')}".strip()
-    row.use_date = f"{payload.get('use_date', '')}".strip()
-    row.remark = f"{payload.get('remark', '')}".strip()
+    row.spec = payload_text(payload, "spec")
+    row.use_date = payload_text(payload, "use_date")
+    row.remark = payload_text(payload, "remark")
     row.shift_count = _parse_shift_count(payload.get("shift_count", "0"))
 
     db.commit()
