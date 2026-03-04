@@ -92,6 +92,14 @@ from .services.logs_and_ledger import (
     machine_ledger_update as _machine_ledger_update,
     update_construction_log as _update_construction_log,
 )
+from .services.materials_inventory import (
+    create_material as _create_material,
+    delete_inventory_rows as _delete_inventory_rows,
+    delete_materials as _delete_materials,
+    inventory_list as _inventory_list,
+    list_materials as _list_materials,
+    update_material as _update_material,
+)
 from .services.projects import delete_project_cascade as _delete_project_cascade
 from .services.attachments import (
     ALLOWED_CONTENT_TYPES,
@@ -497,19 +505,7 @@ def create_material(
     _: User = Depends(_require_user),
     project: Project = Depends(_require_project),
 ) -> dict:
-    code = f"MAT-{datetime.now().strftime('%Y%m%d%H%M%S%f')}"
-    row = Material(
-        project_id=project.id,
-        code=code,
-        name=payload.name.strip(),
-        spec=payload.spec.strip(),
-        unit=payload.unit.strip(),
-        category="消耗品",
-    )
-    db.add(row)
-    db.commit()
-    db.refresh(row)
-    return {"id": row.id}
+    return _create_material(payload, db, project)
 
 
 @app.get("/api/materials")
@@ -519,21 +515,7 @@ def list_materials(
     _: User = Depends(_require_user),
     project: Project = Depends(_require_project),
 ) -> list[dict]:
-    stmt = select(Material).where(Material.project_id == project.id, Material.is_active.is_(True)).order_by(Material.id.desc())
-    if keyword.strip():
-        kw = f"%{keyword.strip()}%"
-        stmt = stmt.where((Material.name.like(kw)) | (Material.spec.like(kw)))
-    rows = db.scalars(stmt).all()
-    return [
-        {
-            "id": m.id,
-            "name": m.name,
-            "spec": m.spec,
-            "unit": m.unit,
-            "created_at": m.created_at.isoformat(),
-        }
-        for m in rows
-    ]
+    return _list_materials(keyword, db, project)
 
 
 @app.put("/api/materials/{material_id}")
@@ -544,16 +526,7 @@ def update_material(
     _: User = Depends(_require_user),
     project: Project = Depends(_require_project),
 ) -> dict:
-    row = db.get(Material, material_id)
-    if not row:
-        raise HTTPException(status_code=404, detail="材料不存在")
-    if row.project_id != project.id:
-        raise HTTPException(status_code=403, detail="无权修改该工程材料")
-    row.name = payload.name.strip()
-    row.spec = payload.spec.strip()
-    row.unit = payload.unit.strip()
-    db.commit()
-    return {"ok": True}
+    return _update_material(material_id, payload, db, project)
 
 
 @app.post("/api/materials/delete")
@@ -563,26 +536,7 @@ def delete_materials(
     _: User = Depends(_require_user),
     project: Project = Depends(_require_project),
 ) -> dict:
-    ids: list[int] = []
-    for value in payload.material_ids:
-        try:
-            n = int(value)
-        except Exception:
-            continue
-        if n > 0:
-            ids.append(n)
-    if not ids:
-        raise HTTPException(status_code=400, detail="请选择要删除的材料")
-
-    rows = db.scalars(select(Material).where(Material.id.in_(ids))).all()
-    deleted = 0
-    for row in rows:
-        if row.project_id != project.id:
-            continue
-        row.is_active = False
-        deleted += 1
-    db.commit()
-    return {"ok": True, "deleted": deleted}
+    return _delete_materials(payload, db, project)
 
 
 @app.post("/api/stock-in")
@@ -949,29 +903,7 @@ def inventory_list(
     _: User = Depends(_require_user),
     project: Project = Depends(_require_project),
 ) -> list[dict]:
-    rows = db.scalars(
-        select(Inventory)
-        .join(Material, Inventory.material_id == Material.id)
-        .where(Material.project_id == project.id, Material.is_active.is_(True))
-        .order_by(Inventory.id.desc())
-    ).all()
-    result = []
-    kw = keyword.strip().lower()
-    for r in rows:
-        if kw and kw not in (f"{r.material.name} {r.material.spec}".lower()):
-            continue
-        result.append(
-            {
-                "id": r.id,
-                "material_id": r.material_id,
-                "name": r.material.name,
-                "spec": r.material.spec,
-                "unit": r.material.unit,
-                "qty": _dec(Decimal(r.qty)),
-                "updated_at": r.updated_at.isoformat() if r.updated_at else "",
-            }
-        )
-    return result
+    return _inventory_list(keyword, db, project)
 
 
 @app.get("/api/machine-ledger")
@@ -1022,28 +954,12 @@ def delete_inventory_rows(
     current_user: User = Depends(_require_user),
     project: Project = Depends(_require_project),
 ) -> dict:
-    ids: list[int] = []
-    for value in payload.inventory_ids:
-        try:
-            n = int(value)
-        except Exception:
-            continue
-        if n > 0:
-            ids.append(n)
-    if not ids:
-        raise HTTPException(status_code=400, detail="请选择要删除的库存记录")
-    if not verify_password(payload.password, current_user.password_hash):
-        raise HTTPException(status_code=400, detail="登录密码错误")
-
-    rows = db.scalars(select(Inventory).where(Inventory.id.in_(ids))).all()
-    deleted = 0
-    for row in rows:
-        if row.material.project_id != project.id:
-            continue
-        db.delete(row)
-        deleted += 1
-    db.commit()
-    return {"ok": True, "deleted": deleted}
+    return _delete_inventory_rows(
+        payload=payload,
+        db=db,
+        project=project,
+        password_ok=verify_password(payload.password, current_user.password_hash),
+    )
 
 
 @app.get("/api/export/inventory")
