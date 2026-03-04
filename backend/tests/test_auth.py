@@ -1,4 +1,9 @@
 from fastapi.testclient import TestClient
+from sqlalchemy.orm import Session
+
+from app.database import engine
+from app.models import User
+from app.security import get_password_hash
 
 
 def test_healthz_and_bootstrap_status(client: TestClient):
@@ -43,3 +48,44 @@ def test_bootstrap_init_rejects_weak_password(client: TestClient):
     )
     assert init_res.status_code == 400
     assert "至少8位" in init_res.json().get("detail", "")
+
+
+def test_non_admin_forbidden_for_high_risk_admin_endpoints(client: TestClient):
+    init_res = client.post(
+        "/api/bootstrap/init",
+        json={"username": "admin", "password": "Admin1234"},
+    )
+    assert init_res.status_code == 200
+
+    with Session(engine) as db:
+        db.add(
+            User(
+                username="operator",
+                password_hash=get_password_hash("Operator123"),
+                must_change_password=False,
+                is_active=True,
+            )
+        )
+        db.commit()
+
+    login_res = client.post(
+        "/api/auth/login",
+        json={"username": "operator", "password": "Operator123"},
+    )
+    assert login_res.status_code == 200
+    token = login_res.json().get("access_token")
+    assert token
+    headers = {"Authorization": f"Bearer {token}"}
+
+    export_res = client.get("/api/export/database", headers=headers)
+    assert export_res.status_code == 403
+
+    cleanup_res = client.post("/api/admin/attachments/cleanup", headers=headers)
+    assert cleanup_res.status_code == 403
+
+    import_res = client.post(
+        "/api/bootstrap/import-package",
+        files={"file": ("fake.db", b"x", "application/octet-stream")},
+        headers=headers,
+    )
+    assert import_res.status_code == 403

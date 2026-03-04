@@ -172,6 +172,44 @@ def _safe_remove_uploaded_file(file_path: str) -> bool:
     return False
 
 
+def _attachment_disk_path_candidates(row: Attachment) -> list[Path]:
+    uploads_root = _uploads_root()
+    candidates: list[Path] = []
+
+    stored_name = (row.stored_name or "").strip()
+    if stored_name:
+        candidates.append(uploads_root / Path(stored_name))
+
+    raw_path = (row.path or "").strip()
+    if raw_path:
+        path_obj = Path(raw_path)
+        if not path_obj.is_absolute():
+            path_obj = uploads_root / path_obj
+        candidates.append(path_obj)
+
+    unique: list[Path] = []
+    seen: set[str] = set()
+    for path_obj in candidates:
+        key = str(path_obj)
+        if key in seen:
+            continue
+        seen.add(key)
+        unique.append(path_obj)
+    return unique
+
+
+def _resolve_attachment_disk_path(row: Attachment) -> Path | None:
+    uploads_root = _uploads_root()
+    for candidate in _attachment_disk_path_candidates(row):
+        try:
+            resolved = candidate.resolve()
+        except OSError:
+            continue
+        if _is_subpath(resolved, uploads_root):
+            return resolved
+    return None
+
+
 def _cleanup_deleted_attachments(db: Session, retention_days: int | None = None) -> dict:
     days = settings.deleted_attachment_retention_days if retention_days is None else retention_days
     days = max(0, int(days or 0))
@@ -416,6 +454,20 @@ def _require_user(
     if not user:
         raise HTTPException(status_code=401, detail="用户不存在")
     return user
+
+
+def _is_admin_user(db: Session, user: User) -> bool:
+    first_user_id = db.scalar(select(User.id).where(User.is_active.is_(True)).order_by(User.id.asc()).limit(1))
+    return bool(first_user_id and int(first_user_id) == int(user.id))
+
+
+def _require_admin(
+    current_user: User = Depends(_require_user),
+    db: Session = Depends(get_db),
+) -> User:
+    if not _is_admin_user(db, current_user):
+        raise HTTPException(status_code=403, detail="仅管理员可执行此操作")
+    return current_user
 
 
 def _order_no(prefix: str, db: Session, order_model) -> str:
@@ -1934,7 +1986,7 @@ def export_inventory(
 
 
 @app.get("/api/export/database")
-def export_database(_: User = Depends(_require_user)) -> FileResponse:
+def export_database(_: User = Depends(_require_admin)) -> FileResponse:
     db_path = _resolve_db_path()
     if not db_path.exists():
         raise HTTPException(status_code=404, detail="数据库文件不存在")
@@ -1960,6 +2012,8 @@ async def import_bootstrap_package(
                 user = db.scalar(select(User).where(User.username == username, User.is_active.is_(True)))
                 if not user:
                     raise HTTPException(status_code=401, detail="用户不存在")
+                if not _is_admin_user(db, user):
+                    raise HTTPException(status_code=403, detail="仅管理员可执行此操作")
     except HTTPException:
         raise
     except Exception:
@@ -2189,7 +2243,7 @@ def _normalize_attachment_storage(db: Session) -> None:
             current_stored_name=row.stored_name,
         )
 
-        old_path = Path(row.path) if row.path else None
+        old_path = _resolve_attachment_disk_path(row)
         if old_path and old_path.exists() and old_path.resolve() != full_target.resolve():
             full_target.parent.mkdir(parents=True, exist_ok=True)
             try:
@@ -2331,9 +2385,10 @@ def download_attachment(
         raise HTTPException(status_code=404, detail="附件不存在")
     if _target_project_id_for_attachment(db, row.order_type, row.order_id) != project.id:
         raise HTTPException(status_code=403, detail="无权访问该工程附件")
-    if not os.path.exists(row.path):
+    resolved_path = _resolve_attachment_disk_path(row)
+    if not resolved_path or not resolved_path.is_file():
         raise HTTPException(status_code=404, detail="文件不存在")
-    response = FileResponse(path=row.path, filename=row.filename, media_type=row.content_type)
+    response = FileResponse(path=str(resolved_path), filename=row.filename, media_type=row.content_type)
     encoded = quote(row.filename or "file")
     response.headers["Content-Disposition"] = f"attachment; filename*=UTF-8''{encoded}"
     return response
@@ -2351,10 +2406,11 @@ def preview_attachment(
         raise HTTPException(status_code=404, detail="附件不存在")
     if _target_project_id_for_attachment(db, row.order_type, row.order_id) != project.id:
         raise HTTPException(status_code=403, detail="无权访问该工程附件")
-    if not os.path.exists(row.path):
+    resolved_path = _resolve_attachment_disk_path(row)
+    if not resolved_path or not resolved_path.is_file():
         raise HTTPException(status_code=404, detail="文件不存在")
 
-    response = FileResponse(path=row.path, filename=row.filename, media_type=row.content_type)
+    response = FileResponse(path=str(resolved_path), filename=row.filename, media_type=row.content_type)
     encoded = quote(row.filename or "file")
     response.headers["Content-Disposition"] = f"inline; filename*=UTF-8''{encoded}"
     return response
@@ -2381,7 +2437,7 @@ def delete_attachment(
 def cleanup_deleted_attachments(
     retention_days: int = Query(default=0, ge=0, le=3650),
     db: Session = Depends(get_db),
-    _: User = Depends(_require_user),
+    _: User = Depends(_require_admin),
 ) -> dict:
     return _cleanup_deleted_attachments(db, retention_days=retention_days)
 

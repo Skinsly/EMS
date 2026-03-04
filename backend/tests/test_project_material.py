@@ -1,6 +1,11 @@
 import base64
+from pathlib import Path
 
 from fastapi.testclient import TestClient
+from sqlalchemy.orm import Session
+
+from app.database import engine
+from app.models import Attachment
 
 
 def test_projects_requires_auth_header(client: TestClient):
@@ -187,3 +192,45 @@ def test_delete_machine_ledger_also_soft_deletes_its_attachments(client: TestCli
         headers=make_headers(auth_token, project_id),
     )
     assert preview_after.status_code == 404
+
+
+def test_attachment_preview_rejects_path_outside_uploads(client: TestClient, auth_token: str, make_headers):
+    create_res = client.post(
+        "/api/projects",
+        json={"name": "附件路径校验工程A", "start_date": "2026-02-26"},
+        headers=make_headers(auth_token),
+    )
+    assert create_res.status_code == 200
+    project_id = create_res.json()["id"]
+
+    machine_res = client.post(
+        "/api/machine-ledger",
+        json={"name": "塔吊", "spec": "QTZ", "use_date": "2026-02-26", "shift_count": 1, "remark": "测试"},
+        headers=make_headers(auth_token, project_id),
+    )
+    assert machine_res.status_code == 200
+    row_id = machine_res.json()["id"]
+
+    png_bytes = base64.b64decode("iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO7+vXQAAAAASUVORK5CYII=")
+    upload_res = client.post(
+        "/api/attachments/upload",
+        params={"order_type": "machine_ledger", "order_id": row_id},
+        files={"file": ("machine.png", png_bytes, "image/png")},
+        headers=make_headers(auth_token, project_id),
+    )
+    assert upload_res.status_code == 200
+    attachment_id = int(upload_res.json()["id"])
+
+    outside_path = Path(__file__).resolve()
+    with Session(engine) as db:
+        row = db.get(Attachment, attachment_id)
+        assert row is not None
+        row.stored_name = ""
+        row.path = str(outside_path)
+        db.commit()
+
+    preview_res = client.get(
+        f"/api/attachments/{attachment_id}/preview",
+        headers=make_headers(auth_token, project_id),
+    )
+    assert preview_res.status_code == 404
