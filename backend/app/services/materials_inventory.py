@@ -7,6 +7,7 @@ from sqlalchemy.orm import Session
 from ..models import Inventory, Material, Project
 from ..schemas import InventoryDeleteRequest, MaterialCreate, MaterialDeleteRequest, MaterialUpdate
 from ..utils.number_format import dec_fixed_3
+from ..utils.id_parse import parse_positive_int_ids
 
 
 def create_material(payload: MaterialCreate, db: Session, project: Project) -> dict:
@@ -57,14 +58,7 @@ def update_material(material_id: int, payload: MaterialUpdate, db: Session, proj
 
 
 def delete_materials(payload: MaterialDeleteRequest, db: Session, project: Project) -> dict:
-    ids: list[int] = []
-    for value in payload.material_ids:
-        try:
-            num = int(value)
-        except Exception:
-            continue
-        if num > 0:
-            ids.append(num)
+    ids = parse_positive_int_ids(payload.material_ids)
     if not ids:
         raise HTTPException(status_code=400, detail="请选择要删除的材料")
 
@@ -111,14 +105,7 @@ def delete_inventory_rows(
     project: Project,
     password_ok: bool,
 ) -> dict:
-    ids: list[int] = []
-    for value in payload.inventory_ids:
-        try:
-            num = int(value)
-        except Exception:
-            continue
-        if num > 0:
-            ids.append(num)
+    ids = parse_positive_int_ids(payload.inventory_ids)
     if not ids:
         raise HTTPException(status_code=400, detail="请选择要删除的库存记录")
     if not password_ok:

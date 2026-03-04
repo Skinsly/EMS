@@ -7,6 +7,7 @@ from sqlalchemy.orm import Session
 from ..models import Attachment, ConstructionLog, MachineLedger, Project, User
 from ..schemas import ConstructionLogCreate, ConstructionLogUpdate
 from .attachments import safe_remove_uploaded_file
+from ..utils.id_parse import parse_positive_int_ids
 from ..utils.number_format import dec_trimmed
 
 
@@ -161,14 +162,7 @@ def machine_ledger_update(row_id: int, payload: dict, db: Session, project: Proj
 
 def machine_ledger_delete(payload: dict, db: Session, project: Project) -> dict:
     raw_ids = payload.get("ids") or []
-    ids: list[int] = []
-    for value in raw_ids:
-        try:
-            num = int(value)
-        except Exception:
-            continue
-        if num > 0:
-            ids.append(num)
+    ids = parse_positive_int_ids(raw_ids)
     if not ids:
         raise HTTPException(status_code=400, detail="请选择要删除的记录")
 
