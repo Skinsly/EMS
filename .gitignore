@@ -22,8 +22,10 @@ uploads/
 
 # local env and runtime data
 deploy/.env
+data/
 backend/data/
 backend/uploads/
+backend/tests/.test-data/
 tools/
 
 # test/cache artifacts

@@ -2,7 +2,7 @@ import json
 import re
 from urllib.parse import quote
 from contextlib import asynccontextmanager
-from datetime import datetime, timezone
+from datetime import datetime
 from decimal import Decimal
 from pathlib import Path
 
@@ -158,10 +158,6 @@ def _ensure_dirs() -> None:
 
 def _resolve_db_path() -> Path:
     return _resolve_db_path_from_config(settings.data_dir, settings.db_path)
-
-
-def _utcnow_naive() -> datetime:
-    return datetime.now(timezone.utc).replace(tzinfo=None)
 
 
 def _seed_data(db: Session) -> None:
