@@ -9,6 +9,7 @@ from ..schemas import ConstructionLogCreate, ConstructionLogUpdate
 from .attachments import safe_remove_uploaded_file
 from ..utils.id_parse import parse_positive_int_ids
 from ..utils.number_format import dec_trimmed
+from ..utils.text import normalized_lower
 
 
 def create_construction_log(payload: ConstructionLogCreate, db: Session, current_user: User, project: Project) -> dict:
@@ -91,7 +92,7 @@ def machine_ledger_list(keyword: str, db: Session, project: Project) -> list[dic
         .where(MachineLedger.project_id == project.id)
         .order_by(MachineLedger.id.desc())
     ).all()
-    kw = keyword.strip().lower()
+    kw = normalized_lower(keyword)
     result: list[dict] = []
     for row in rows:
         if kw and kw not in f"{row.name} {row.spec} {row.remark}".lower():

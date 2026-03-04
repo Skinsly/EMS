@@ -22,6 +22,7 @@ from ..models import (
     Warehouse,
 )
 from ..schemas import StockInCreate, StockOrderItemInput, StockOutCreate
+from ..utils.text import normalized_lower
 
 
 def order_no(prefix: str, db: Session, order_model) -> str:
@@ -257,7 +258,7 @@ def create_stock_out(
 
 
 def stock_draft_type_or_400(draft_type: str) -> str:
-    normalized = (draft_type or "").strip().lower()
+    normalized = normalized_lower(draft_type)
     if normalized not in {"in", "out"}:
         raise HTTPException(status_code=400, detail="草稿类型无效")
     return normalized
@@ -330,7 +331,7 @@ def commit_stock_draft(draft_type: str, db: Session, current_user: User, project
 
 
 def correct_stock_record(payload: dict, db: Session, current_user: User, project: Project) -> dict:
-    kind = (payload.get("record_type") or "").strip().lower()
+    kind = normalized_lower(payload.get("record_type"))
     order_no_value = f"{payload.get('order_no', '')}".strip()
     reason = f"{payload.get('reason', '')}".strip()
     if kind not in {"in", "out"}:

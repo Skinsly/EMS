@@ -5,6 +5,7 @@ from fastapi.responses import StreamingResponse
 
 from ..models import Inventory, MachineLedger
 from ..utils.number_format import dec_fixed_3, dec_trimmed
+from ..utils.text import normalized_lower
 
 
 def build_stock_records_export(rows: list[dict], kind: str) -> StreamingResponse:
@@ -70,7 +71,7 @@ def build_inventory_export(rows: list[Inventory]) -> StreamingResponse:
 
 
 def build_machine_ledger_export(rows: list[MachineLedger], keyword: str = "") -> StreamingResponse:
-    kw = (keyword or "").strip().lower()
+    kw = normalized_lower(keyword)
     filtered_rows: list[MachineLedger] = []
     for row in rows:
         if kw and kw not in f"{row.name} {row.spec} {row.remark}".lower():

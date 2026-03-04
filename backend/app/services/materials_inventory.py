@@ -8,6 +8,7 @@ from ..models import Inventory, Material, Project
 from ..schemas import InventoryDeleteRequest, MaterialCreate, MaterialDeleteRequest, MaterialUpdate
 from ..utils.number_format import dec_fixed_3
 from ..utils.id_parse import parse_positive_int_ids
+from ..utils.text import normalized_lower
 
 
 def create_material(payload: MaterialCreate, db: Session, project: Project) -> dict:
@@ -81,7 +82,7 @@ def inventory_list(keyword: str, db: Session, project: Project) -> list[dict]:
         .order_by(Inventory.id.desc())
     ).all()
     result: list[dict] = []
-    kw = keyword.strip().lower()
+    kw = normalized_lower(keyword)
     for row in rows:
         if kw and kw not in (f"{row.material.name} {row.material.spec}".lower()):
             continue
