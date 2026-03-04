@@ -292,7 +292,7 @@ def commit_stock_draft(draft_type: str, db: Session, current_user: User, project
         try:
             material_id = int(item.get("material_id", 0))
             qty = Decimal(str(item.get("qty", "0")))
-        except Exception:
+        except (ArithmeticError, TypeError, ValueError):
             continue
         if material_id <= 0 or qty <= Decimal("0"):
             continue

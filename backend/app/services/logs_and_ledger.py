@@ -116,12 +116,7 @@ def machine_ledger_create(payload: dict, db: Session, project: Project) -> dict:
     spec = f"{payload.get('spec', '')}".strip()
     use_date = f"{payload.get('use_date', '')}".strip()
     remark = f"{payload.get('remark', '')}".strip()
-    try:
-        shift_count = Decimal(str(payload.get("shift_count", "0") or "0"))
-    except Exception as exc:
-        raise HTTPException(status_code=400, detail="台班格式不正确") from exc
-    if shift_count < Decimal("0"):
-        raise HTTPException(status_code=400, detail="台班不能小于0")
+    shift_count = _parse_shift_count(payload.get("shift_count", "0"))
 
     row = MachineLedger(
         project_id=project.id,
@@ -149,12 +144,7 @@ def machine_ledger_update(row_id: int, payload: dict, db: Session, project: Proj
     row.spec = f"{payload.get('spec', '')}".strip()
     row.use_date = f"{payload.get('use_date', '')}".strip()
     row.remark = f"{payload.get('remark', '')}".strip()
-    try:
-        row.shift_count = Decimal(str(payload.get("shift_count", "0") or "0"))
-    except Exception as exc:
-        raise HTTPException(status_code=400, detail="台班格式不正确") from exc
-    if row.shift_count < Decimal("0"):
-        raise HTTPException(status_code=400, detail="台班不能小于0")
+    row.shift_count = _parse_shift_count(payload.get("shift_count", "0"))
 
     db.commit()
     return {"ok": True}
@@ -201,3 +191,13 @@ def machine_ledger_delete(payload: dict, db: Session, project: Project) -> dict:
         safe_remove_uploaded_file(file_path)
 
     return {"ok": True, "deleted": deleted}
+
+
+def _parse_shift_count(raw_value: object) -> Decimal:
+    try:
+        value = Decimal(str(raw_value or "0"))
+    except (ArithmeticError, TypeError, ValueError) as exc:
+        raise HTTPException(status_code=400, detail="台班格式不正确") from exc
+    if value < Decimal("0"):
+        raise HTTPException(status_code=400, detail="台班不能小于0")
+    return value

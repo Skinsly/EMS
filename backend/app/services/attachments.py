@@ -48,7 +48,7 @@ def is_subpath(path: Path, root: Path) -> bool:
     try:
         path.resolve().relative_to(root.resolve())
         return True
-    except Exception:
+    except (RuntimeError, ValueError, OSError):
         return False
 
 
