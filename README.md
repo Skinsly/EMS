@@ -124,6 +124,18 @@ docker compose --env-file deploy/.env -f deploy/docker-compose.yml up -d --build
 - `backend/` 后端项目
 - `deploy/` 部署配置
 
+### Backend 模块边界（当前）
+
+- `backend/app/main.py`：路由与应用装配（依赖注入、生命周期、路由编排）
+- `backend/app/dependencies.py`：认证、管理员校验、工程上下文校验
+- `backend/app/services/bootstrap_import.py`：导入 SQLite 数据包流程与校验
+- `backend/app/services/attachments.py`：附件上传/命名/路径安全/清理与归一化
+- `backend/app/services/stock_flow.py`：入库、出库、草稿入账、记录更正
+- `backend/app/services/logs_and_ledger.py`：施工日志与机械台账业务
+- `backend/app/services/materials_inventory.py`：材料与库存业务
+- `backend/app/services/exports.py`：导出报表 HTML/Excel 构建
+- `backend/app/services/projects.py`：工程删除级联清理
+
 ## 相关说明
 
 - 前端复用规范：`frontend/src/component-reuse-guidelines.md`

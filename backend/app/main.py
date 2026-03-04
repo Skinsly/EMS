@@ -1,9 +1,8 @@
 import json
-import os
 import re
 from urllib.parse import quote
 from contextlib import asynccontextmanager
-from datetime import datetime, timedelta, timezone
+from datetime import datetime, timezone
 from decimal import Decimal
 from pathlib import Path
 
@@ -13,7 +12,6 @@ from fastapi.responses import FileResponse, StreamingResponse
 from fastapi.security import HTTPAuthorizationCredentials
 from fastapi.staticfiles import StaticFiles
 from sqlalchemy import and_, case, delete, func, literal, or_, select, text, union_all
-from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
 from .config import settings
@@ -25,7 +23,7 @@ from .dependencies import (
     require_user as _require_user,
     security,
 )
-from .idempotency import cleanup_expired_idempotency, read_idempotency, write_idempotency
+from .idempotency import cleanup_expired_idempotency
 from .models import (
     Attachment,
     ConstructionLog,
@@ -57,7 +55,6 @@ from .schemas import (
     ProjectDeleteRequest,
     ProgressPlanItemCreate,
     ProgressPlanItemUpdate,
-    StockOrderItemInput,
     StockInCreate,
     StockOutCreate,
     TokenResponse,
@@ -76,10 +73,7 @@ from .services.stock_flow import (
     correct_stock_record as _correct_stock_record,
     create_stock_in as _create_stock_in,
     create_stock_out as _create_stock_out,
-    default_warehouse as _default_warehouse,
-    inventory_row as _inventory_row,
     load_stock_draft as _load_stock_draft,
-    order_no as _order_no,
     stock_draft_type_or_400 as _stock_draft_type_or_400,
 )
 from .services.logs_and_ledger import (
@@ -231,13 +225,6 @@ DELETE_PROJECT_ACK_PHRASE = "我已知晓删除后不可恢复"
 
 def _dec(v: Decimal) -> str:
     return f"{v:.3f}"
-
-
-def _qty_text(v: Decimal) -> str:
-    text = format(v, "f")
-    if "." in text:
-        text = text.rstrip("0").rstrip(".")
-    return text or "0"
 
 
 @app.post("/api/auth/login", response_model=TokenResponse)
