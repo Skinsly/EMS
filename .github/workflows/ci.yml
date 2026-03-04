@@ -23,6 +23,11 @@ jobs:
           python -m pip install --upgrade pip
           pip install -r backend/requirements-dev.txt
 
+      - name: Run backend lint
+        run: |
+          ruff check app tests
+        working-directory: backend
+
       - name: Run backend tests
         run: |
           pytest tests -q
@@ -43,6 +48,10 @@ jobs:
 
       - name: Install frontend deps
         run: npm ci
+        working-directory: frontend
+
+      - name: Lint frontend
+        run: npm run lint
         working-directory: frontend
 
       - name: Build frontend

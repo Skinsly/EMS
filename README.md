@@ -48,6 +48,7 @@ python -m pytest tests -q
 # 前端构建
 cd ../frontend
 npm ci
+npm run lint
 npm run build
 ```
 

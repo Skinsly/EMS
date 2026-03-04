@@ -62,7 +62,7 @@ popd >nul
 echo [OK] Backend health smoke test passed.
 
 echo.
-echo [4/5] Frontend install (npm install)...
+echo [4/6] Frontend install (npm install)...
 pushd "%ROOT_DIR%\frontend" >nul
 set "PATH=%NODE_DIR%;%PATH%"
 call "%NPM_CMD%" install
@@ -74,7 +74,17 @@ if errorlevel 1 (
 echo [OK] Frontend dependencies installed.
 
 echo.
-echo [5/5] Frontend build...
+echo [5/6] Frontend lint...
+call "%NPM_CMD%" run lint
+if errorlevel 1 (
+  echo [FAIL] Frontend lint failed.
+  popd >nul
+  exit /b 1
+)
+echo [OK] Frontend lint passed.
+
+echo.
+echo [6/6] Frontend build...
 call "%NPM_CMD%" run build
 if errorlevel 1 (
   echo [FAIL] Frontend build failed.
