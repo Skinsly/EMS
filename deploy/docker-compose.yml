@@ -1,4 +1,13 @@
 services:
+  init-perms:
+    image: alpine:3.20
+    container_name: material-stock-init-perms
+    command: ["sh", "-c", "chown -R ${APP_UID:-10001}:${APP_GID:-10001} /app/data /app/uploads"]
+    volumes:
+      - backend_data:/app/data
+      - backend_uploads:/app/uploads
+    restart: "no"
+
   app:
     image: ${APP_IMAGE:-ghcr.io/skinsly/ems:latest}
     pull_policy: if_not_present
@@ -7,7 +16,13 @@ services:
       dockerfile: Dockerfile
       args:
         BUILDKIT_INLINE_CACHE: "1"
+        UID: ${APP_UID:-10001}
+        GID: ${APP_GID:-10001}
     container_name: material-stock-app
+    depends_on:
+      init-perms:
+        condition: service_completed_successfully
+    user: "${APP_UID:-10001}:${APP_GID:-10001}"
     environment:
       SECRET_KEY: ${SECRET_KEY:?SECRET_KEY is required}
       ACCESS_TOKEN_EXPIRE_MINUTES: ${ACCESS_TOKEN_EXPIRE_MINUTES:-720}
