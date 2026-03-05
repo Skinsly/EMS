@@ -12,7 +12,7 @@
       </template>
     </StockHeadBar>
 
-    <el-table class="clickable-table uniform-row-table" :data="rows" border @selection-change="onSelectionChange" @row-click="onRowClick">
+    <el-table v-loading="listLoading" class="clickable-table uniform-row-table" :data="rows" border @selection-change="onSelectionChange" @row-click="onRowClick">
       <el-table-column type="selection" width="50" />
       <el-table-column label="序号" width="70" align="center" column-key="skip-row-open">
         <template #default="scope">
@@ -226,6 +226,8 @@ import ToolbarSearchInput from '../components/ToolbarSearchInput.vue'
 import ToolbarIconAction from '../components/ToolbarIconAction.vue'
 import StockHeadBar from '../components/StockHeadBar.vue'
 import { formatDateInput } from '../utils/date'
+import { useRequestLatest } from '../composables/useRequestLatest'
+import { useLoadGuard } from '../composables/useLoadGuard'
 
 const allRows = ref([])
 const keyword = ref('')
@@ -263,6 +265,9 @@ const viewingRow = ref({
 const contentAutosize = computed(() => (formFullscreen.value ? { minRows: 16, maxRows: 22 } : { minRows: 10, maxRows: 14 }))
 const viewingPhotos = ref([])
 const viewingPhotoUrls = ref([])
+const viewingRequest = useRequestLatest()
+const listRequest = useRequestLatest()
+const { loading: listLoading, run: runLoad } = useLoadGuard()
 const existingPhotos = ref([])
 const photoFileList = ref([])
 const albumInputRef = ref(null)
@@ -519,12 +524,22 @@ const uploadPhotosForLog = async (logId) => {
 }
 
 const load = async () => {
-  const { data } = await api.get('/construction-logs')
-  allRows.value = data
-  if (page.value > totalPages.value) {
-    page.value = totalPages.value
-  }
-  selectedIds.value = []
+  const token = listRequest.next()
+  await runLoad(
+    async () => {
+      const { data } = await api.get('/construction-logs')
+      if (!listRequest.isLatest(token)) return
+      allRows.value = data
+      if (page.value > totalPages.value) {
+        page.value = totalPages.value
+      }
+      selectedIds.value = []
+    },
+    (e) => {
+      if (!listRequest.isLatest(token)) return
+      ElMessage.error(e.response?.data?.detail || '加载施工日志失败')
+    }
+  )
 }
 
 const prevPage = () => {
@@ -551,17 +566,19 @@ const onRowClick = (row, column) => {
 const formatIndex = (index) => String(index + 1).padStart(2, '0')
 
 const viewRow = async (row) => {
+  const token = viewingRequest.next()
   viewingRow.value = {
     log_date: row.log_date || '',
     weather: row.weather || '',
     content: row.content || ''
   }
+  clearViewingPhotos()
   await updateRenderedViewingContent()
   viewOpen.value = true
 
   try {
     const { data } = await api.get(`/attachments?order_type=construction_log&order_id=${row.id}`)
-    clearViewingPhotos()
+    if (!viewingRequest.isLatest(token)) return
     const images = data
       .filter((item) => (item.content_type || '').startsWith('image/'))
     const photos = await Promise.all(
@@ -570,9 +587,14 @@ const viewRow = async (row) => {
         previewUrl: await loadAttachmentPreviewUrl(item.id)
       }))
     )
+    if (!viewingRequest.isLatest(token)) {
+      photos.forEach((item) => revokeObjectUrl(item.previewUrl))
+      return
+    }
     viewingPhotos.value = photos
     viewingPhotoUrls.value = photos.map((item) => item.previewUrl)
   } catch (e) {
+    if (!viewingRequest.isLatest(token)) return
     clearViewingPhotos()
     ElMessage.error(e.response?.data?.detail || '加载日志照片失败')
   }
@@ -703,6 +725,7 @@ const closeFormDialog = () => {
 }
 
 const closeViewDialog = () => {
+  viewingRequest.invalidate()
   viewOpen.value = false
   renderedViewingContent.value = '<p>暂无内容</p>'
 }
@@ -739,6 +762,8 @@ onMounted(() => {
 })
 
 onBeforeUnmount(() => {
+  listRequest.invalidate()
+  viewingRequest.invalidate()
   if (contentResizeTimer) {
     window.clearTimeout(contentResizeTimer)
     contentResizeTimer = null

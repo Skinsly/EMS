@@ -8,7 +8,7 @@
         </ToolbarIconAction>
       </template>
     </StockHeadBar>
-    <el-table class="uniform-row-table no-row-hover-table" :data="rows" border>
+    <el-table v-loading="listLoading" class="uniform-row-table no-row-hover-table" :data="rows" border>
       <el-table-column label="序号" width="70">
         <template #default="scope">
           {{ formatIndex(scope.$index) }}
@@ -34,12 +34,15 @@
 
 <script setup>
 import { computed, onBeforeUnmount, onMounted, ref } from 'vue'
+import { ElMessage } from 'element-plus'
 import { Download } from '@element-plus/icons-vue'
 import api from '../api'
 import { downloadByApi } from '../download'
 import ToolbarSearchInput from '../components/ToolbarSearchInput.vue'
 import ToolbarIconAction from '../components/ToolbarIconAction.vue'
 import StockHeadBar from '../components/StockHeadBar.vue'
+import { useLoadGuard } from '../composables/useLoadGuard'
+import { useRequestLatest } from '../composables/useRequestLatest'
 
 const keyword = ref('')
 const allRows = ref([])
@@ -50,15 +53,27 @@ const rows = computed(() => {
   return allRows.value.slice(start, start + pageSize)
 })
 const totalPages = computed(() => Math.max(1, Math.ceil(allRows.value.length / pageSize)))
+const { loading: listLoading, run: runLoad } = useLoadGuard()
+const listRequest = useRequestLatest()
 
 const formatIndex = (index) => String(index + 1).padStart(2, '0')
 
 const load = async () => {
-  const { data } = await api.get('/inventory', { params: { keyword: keyword.value } })
-  allRows.value = data
-  if (page.value > totalPages.value) {
-    page.value = totalPages.value
-  }
+  const token = listRequest.next()
+  await runLoad(
+    async () => {
+      const { data } = await api.get('/inventory', { params: { keyword: keyword.value } })
+      if (!listRequest.isLatest(token)) return
+      allRows.value = data
+      if (page.value > totalPages.value) {
+        page.value = totalPages.value
+      }
+    },
+    (e) => {
+      if (!listRequest.isLatest(token)) return
+      ElMessage.error(e.response?.data?.detail || '加载库存台账失败')
+    }
+  )
 }
 
 const prevPage = () => {
@@ -112,6 +127,7 @@ onMounted(() => {
 })
 
 onBeforeUnmount(() => {
+  listRequest.invalidate()
   window.removeEventListener('close-all-dialogs', onCloseAllDialogs)
   window.removeEventListener('reset-current-page', onResetEvent)
 })

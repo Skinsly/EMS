@@ -4,7 +4,7 @@ from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from .database import get_db
-from .models import Project, User
+from .models import Project, User, UserProjectAccess
 from .security import decode_access_token
 
 security = HTTPBearer(auto_error=False)
@@ -42,6 +42,7 @@ def require_admin(
 
 
 def require_project(
+    current_user: User = Depends(require_user),
     db: Session = Depends(get_db),
     x_project_id: str | None = Header(default=None),
 ) -> Project:
@@ -54,4 +55,13 @@ def require_project(
     project = db.get(Project, project_id)
     if not project or not project.is_active:
         raise HTTPException(status_code=400, detail="工程不存在或已停用")
+    if not is_admin_user(db, current_user):
+        access = db.scalar(
+            select(UserProjectAccess.id).where(
+                UserProjectAccess.user_id == current_user.id,
+                UserProjectAccess.project_id == project.id,
+            )
+        )
+        if not access:
+            raise HTTPException(status_code=403, detail="无权访问该工程")
     return project

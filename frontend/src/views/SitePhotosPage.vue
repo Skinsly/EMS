@@ -26,8 +26,8 @@
       </template>
     </StockHeadBar>
 
-    <div class="photos-content">
-      <el-empty v-if="!rows.length && !loading" description="暂无现场照片" />
+    <div v-loading="listLoading" class="photos-content">
+      <el-empty v-if="!rows.length && !listLoading" description="暂无现场照片" />
 
       <div :class="['photo-grid', { 'is-animating': gridAnimating }]" :style="photoGridStyle">
         <div v-for="(photo, index) in rows" :key="photo.id" class="photo-card" :title="`大小：${formatSize(photo.size)}`">
@@ -58,6 +58,8 @@ import api from '../api'
 import ToolbarSearchInput from '../components/ToolbarSearchInput.vue'
 import StockHeadBar from '../components/StockHeadBar.vue'
 import { formatDateInput } from '../utils/date'
+import { useRequestLatest } from '../composables/useRequestLatest'
+import { useLoadGuard } from '../composables/useLoadGuard'
 
 const allRows = ref([])
 const page = ref(1)
@@ -66,8 +68,8 @@ const isMobileLayout = ref(window.matchMedia('(max-width: 900px)').matches)
 const pageCardRef = ref(null)
 const isSidebarCollapsed = ref(localStorage.getItem('sidebarCollapsed') === '1')
 const pcExpandedThreeRowHeight = ref(0)
-const loading = ref(false)
 const gridAnimating = ref(false)
+const { loading: listLoading, run: runLoad } = useLoadGuard()
 const PHOTO_LAYOUT = {
   mobileColsByWidth: [
     { max: 760, cols: 2 },
@@ -268,6 +270,7 @@ const photoGridGap = computed(() => {
 
 let pageResizeObserver = null
 let gridAnimationTimer = null
+const loadRequest = useRequestLatest()
 
 const triggerGridAnimation = () => {
   if (gridAnimationTimer) {
@@ -293,29 +296,37 @@ const formatSize = (size) => {
 }
 
 const load = async () => {
-  loading.value = true
-  try {
-    const { data } = await api.get('/site-photos')
-    clearPreviewUrls()
-    const withPreview = await Promise.all(
-      data.map(async (item) => ({
-        ...item,
-        ...(await loadAttachmentPreviewUrl(item.id))
-      }))
-    )
-    allRows.value = withPreview.sort((a, b) => {
-      const dateCompare = String(b.log_date || '').localeCompare(String(a.log_date || ''))
-      if (dateCompare !== 0) return dateCompare
-      return Number(b.id || 0) - Number(a.id || 0)
-    })
-    if (page.value > totalPages.value) {
-      page.value = totalPages.value
+  const token = loadRequest.next()
+  await runLoad(
+    async () => {
+      const { data } = await api.get('/site-photos')
+      if (!loadRequest.isLatest(token)) return
+      const previousRows = allRows.value
+      const withPreview = await Promise.all(
+        data.map(async (item) => ({
+          ...item,
+          ...(await loadAttachmentPreviewUrl(item.id))
+        }))
+      )
+      if (!loadRequest.isLatest(token)) {
+        withPreview.forEach((item) => revokeObjectUrl(item.previewUrl))
+        return
+      }
+      previousRows.forEach((item) => revokeObjectUrl(item.previewUrl))
+      allRows.value = withPreview.sort((a, b) => {
+        const dateCompare = String(b.log_date || '').localeCompare(String(a.log_date || ''))
+        if (dateCompare !== 0) return dateCompare
+        return Number(b.id || 0) - Number(a.id || 0)
+      })
+      if (page.value > totalPages.value) {
+        page.value = totalPages.value
+      }
+    },
+    (e) => {
+      if (!loadRequest.isLatest(token)) return
+      ElMessage.error(e.response?.data?.detail || '加载现场照片失败')
     }
-  } catch (e) {
-    ElMessage.error(e.response?.data?.detail || '加载现场照片失败')
-  } finally {
-    loading.value = false
-  }
+  )
 }
 
 const prevPage = () => {
@@ -374,6 +385,7 @@ onMounted(() => {
 })
 
 onBeforeUnmount(() => {
+  loadRequest.invalidate()
   clearPreviewUrls()
   window.removeEventListener('reset-current-page', onResetEvent)
   window.removeEventListener('resize', updatePhotoCols)

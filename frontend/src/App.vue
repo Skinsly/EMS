@@ -129,6 +129,7 @@ import {
   Check,
   CollectionTag,
   Document,
+  FolderOpened,
   Files,
   Moon,
   OfficeBuilding,
@@ -157,6 +158,7 @@ const mobileMenuOpen = ref(false)
 const draftPendingTotal = ref(0)
 const defaultMenuItems = [
   { index: '/construction-logs', label: '施工日志', icon: Document },
+  { index: '/file-manage', label: '文件管理', icon: FolderOpened },
   { index: '/machine-ledger', label: '机械台账', icon: Van },
   { index: '/site-photos', label: '现场照片', icon: Camera },
   { index: '/materials', label: '材料管理', icon: Box },

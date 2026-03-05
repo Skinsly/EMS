@@ -9,6 +9,7 @@ const StockRecordsPage = () => import('./views/StockRecordsPage.vue')
 const InventoryPage = () => import('./views/InventoryPage.vue')
 const MachineLedgerPage = () => import('./views/MachineLedgerPage.vue')
 const SitePhotosPage = () => import('./views/SitePhotosPage.vue')
+const FileManagePage = () => import('./views/FileManagePage.vue')
 
 const routes = [
   { path: '/login', component: LoginPage },
@@ -23,7 +24,8 @@ const routes = [
   { path: '/stock-out', redirect: '/stock-manage?mode=out' },
   { path: '/inventory', component: InventoryPage },
   { path: '/machine-ledger', component: MachineLedgerPage },
-  { path: '/site-photos', component: SitePhotosPage }
+  { path: '/site-photos', component: SitePhotosPage },
+  { path: '/file-manage', component: FileManagePage }
 ]
 
 const router = createRouter({

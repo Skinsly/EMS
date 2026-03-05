@@ -58,14 +58,17 @@ def inventory_row(db: Session, material_id: int, warehouse_id: int) -> Inventory
     raise HTTPException(status_code=500, detail="库存初始化失败")
 
 
-def default_warehouse(db: Session) -> Warehouse:
+def default_warehouse(db: Session, auto_commit: bool = True) -> Warehouse:
     row = db.scalar(select(Warehouse).order_by(Warehouse.id.asc()))
     if row:
         return row
     row = Warehouse(name="主仓库")
     db.add(row)
-    db.commit()
-    db.refresh(row)
+    if auto_commit:
+        db.commit()
+        db.refresh(row)
+    else:
+        db.flush()
     return row
 
 
@@ -75,6 +78,7 @@ def create_stock_in(
     current_user: User,
     project: Project,
     x_idempotency_key: str | None = None,
+    auto_commit: bool = True,
 ) -> dict:
     cache_key = ""
     key_part = (x_idempotency_key or "").strip()
@@ -84,9 +88,9 @@ def create_stock_in(
         if cached:
             return cached
 
-    warehouse = db.get(Warehouse, payload.warehouse_id) if payload.warehouse_id else default_warehouse(db)
+    warehouse = db.get(Warehouse, payload.warehouse_id) if payload.warehouse_id else default_warehouse(db, auto_commit=auto_commit)
     if not warehouse:
-        warehouse = default_warehouse(db)
+        warehouse = default_warehouse(db, auto_commit=auto_commit)
     if not payload.items:
         raise HTTPException(status_code=400, detail="入库明细不能为空")
 
@@ -143,9 +147,12 @@ def create_stock_in(
             )
         )
 
-    db.commit()
+    if auto_commit:
+        db.commit()
+    else:
+        db.flush()
     result = {"id": order.id, "order_no": order.order_no}
-    if cache_key:
+    if cache_key and auto_commit:
         try:
             write_idempotency(db, cache_key, result)
             db.commit()
@@ -160,6 +167,7 @@ def create_stock_out(
     current_user: User,
     project: Project,
     x_idempotency_key: str | None = None,
+    auto_commit: bool = True,
 ) -> dict:
     cache_key = ""
     key_part = (x_idempotency_key or "").strip()
@@ -169,9 +177,9 @@ def create_stock_out(
         if cached:
             return cached
 
-    warehouse = db.get(Warehouse, payload.warehouse_id) if payload.warehouse_id else default_warehouse(db)
+    warehouse = db.get(Warehouse, payload.warehouse_id) if payload.warehouse_id else default_warehouse(db, auto_commit=auto_commit)
     if not warehouse:
-        warehouse = default_warehouse(db)
+        warehouse = default_warehouse(db, auto_commit=auto_commit)
     if not payload.items:
         raise HTTPException(status_code=400, detail="出库明细不能为空")
 
@@ -246,9 +254,12 @@ def create_stock_out(
         db.rollback()
         raise HTTPException(status_code=500, detail="出库失败，请重试") from exc
 
-    db.commit()
+    if auto_commit:
+        db.commit()
+    else:
+        db.flush()
     result = {"id": order.id, "order_no": order.order_no}
-    if cache_key:
+    if cache_key and auto_commit:
         try:
             write_idempotency(db, cache_key, result)
             db.commit()
@@ -315,6 +326,7 @@ def commit_stock_draft(draft_type: str, db: Session, current_user: User, project
             current_user,
             project,
             None,
+            auto_commit=False,
         )
     else:
         result = create_stock_out(
@@ -323,6 +335,7 @@ def commit_stock_draft(draft_type: str, db: Session, current_user: User, project
             current_user,
             project,
             None,
+            auto_commit=False,
         )
 
     row.payload_json = "[]"

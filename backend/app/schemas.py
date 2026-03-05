@@ -115,3 +115,16 @@ class InventoryDeleteRequest(BaseModel):
 
 class MaterialDeleteRequest(BaseModel):
     material_ids: list[int]
+
+
+class FileCategoryCreate(BaseModel):
+    name: str
+
+
+class FileCategoryRename(BaseModel):
+    name: str
+
+
+class FileCategoryDeleteRequest(BaseModel):
+    password: str
+    delete_files_confirmed: bool = False

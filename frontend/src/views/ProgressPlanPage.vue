@@ -7,7 +7,7 @@
       <div class="top-pager" aria-hidden="true"></div>
     </div>
 
-    <div class="gantt-panel">
+    <div v-loading="planLoading" class="gantt-panel">
       <div class="gantt-title">{{ ganttTitle }}</div>
       <div class="gantt-scroll">
         <div class="gantt-canvas" ref="ganttCanvasRef" :style="{ width: `${canvasWidth}px` }">
@@ -124,6 +124,8 @@ import { ElMessage, ElMessageBox } from 'element-plus'
 import { Plus } from '@element-plus/icons-vue'
 import api from '../api'
 import { formatDateInput, parseDateYmdLocal } from '../utils/date'
+import { useLoadGuard } from '../composables/useLoadGuard'
+import { useRequestLatest } from '../composables/useRequestLatest'
 
 const rows = ref([])
 const ganttCanvasRef = ref(null)
@@ -141,6 +143,8 @@ const editingRow = ref(null)
 const rowCount = ref(11)
 const dayCount = ref(37)
 const projectName = ref(localStorage.getItem('projectName') || '工程')
+const { loading: planLoading, run: runLoad } = useLoadGuard()
+const planRequest = useRequestLatest()
 const ganttTitle = computed(() => projectName.value)
 const taskForm = reactive({
   task_name: '',
@@ -659,8 +663,18 @@ const onPointerUp = () => {
 }
 
 const load = async () => {
-  const { data } = await api.get('/progress-plans')
-  rows.value = data.map((row) => normalizeRow(row))
+  const token = planRequest.next()
+  await runLoad(
+    async () => {
+      const { data } = await api.get('/progress-plans')
+      if (!planRequest.isLatest(token)) return
+      rows.value = data.map((row) => normalizeRow(row))
+    },
+    (e) => {
+      if (!planRequest.isLatest(token)) return
+      ElMessage.error(e.response?.data?.detail || '加载进度计划失败')
+    }
+  )
 }
 
 const resetPage = async () => {
@@ -683,6 +697,7 @@ onMounted(() => {
 })
 
 onBeforeUnmount(() => {
+  planRequest.invalidate()
   dragHint.value = { visible: false, text: '', x: 0, y: 0 }
   window.removeEventListener('reset-current-page', onResetEvent)
   window.removeEventListener('close-all-dialogs', onCloseAllDialogs)

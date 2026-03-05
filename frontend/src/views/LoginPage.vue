@@ -53,6 +53,7 @@
           v-model="openImportDialog"
           width="420px"
           :close-on-click-modal="false"
+          :close-on-press-escape="false"
           :show-close="false"
           class="init-dialog"
           title="导入数据包"
@@ -71,6 +72,16 @@
             </button>
           </el-upload>
           <p class="import-file-name">{{ importFileName || '未选择文件' }}</p>
+          <el-form v-if="initialized" @submit.prevent>
+            <el-form-item>
+              <el-input
+                v-model="importAdminPassword"
+                show-password
+                autocomplete="current-password"
+                placeholder="请输入管理员密码"
+              />
+            </el-form-item>
+          </el-form>
           <template #footer>
             <div class="init-dialog-footer">
               <el-button type="primary" class="login-btn init-submit-btn" :loading="importing" @click="importDataPackage">导入数据包</el-button>
@@ -83,7 +94,7 @@
 </template>
 
 <script setup>
-import { ref } from 'vue'
+import { ref, watch } from 'vue'
 import { useRouter } from 'vue-router'
 import { ElMessage } from 'element-plus'
 import { Setting, UploadFilled } from '@element-plus/icons-vue'
@@ -101,6 +112,7 @@ const initDialogVisible = ref(false)
 const openImportDialog = ref(false)
 const importFileName = ref('')
 const importFileRaw = ref(null)
+const importAdminPassword = ref('')
 const importing = ref(false)
 const loginError = ref('')
 let loginErrorTimer = null
@@ -185,15 +197,23 @@ const importDataPackage = async () => {
     showLoginError('请先选择数据包文件')
     return
   }
+  if (initialized.value && !importAdminPassword.value.trim()) {
+    showLoginError('请输入管理员密码')
+    return
+  }
   importing.value = true
   try {
     const formData = new FormData()
     formData.append('file', importFileRaw.value)
+    if (initialized.value) {
+      formData.append('admin_password', importAdminPassword.value.trim())
+    }
     await api.post('/bootstrap/import-package', formData)
     ElMessage.success('数据包导入成功，请登录')
     openImportDialog.value = false
     importFileName.value = ''
     importFileRaw.value = null
+    importAdminPassword.value = ''
     await loadBootstrapStatus()
   } catch (e) {
     const detail = e.response?.data?.detail
@@ -213,6 +233,12 @@ const loadBootstrapStatus = async () => {
     initDialogVisible.value = false
   }
 }
+
+watch(openImportDialog, (visible) => {
+  if (!visible) {
+    importAdminPassword.value = ''
+  }
+})
 
 loadBootstrapStatus()
 </script>

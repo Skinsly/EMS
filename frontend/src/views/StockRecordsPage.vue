@@ -15,7 +15,7 @@
       </template>
     </StockHeadBar>
 
-    <el-table class="uniform-row-table clickable-table" :data="rows" border @selection-change="onSelectionChange" @row-click="openDetailByRow">
+    <el-table v-loading="listLoading" class="uniform-row-table clickable-table" :data="rows" border @selection-change="onSelectionChange" @row-click="openDetailByRow">
       <el-table-column type="selection" width="50" />
       <el-table-column label="序号" width="70">
         <template #default="scope">
@@ -100,7 +100,7 @@
 </template>
 
 <script setup>
-import { computed, onMounted, reactive, ref } from 'vue'
+import { computed, onBeforeUnmount, onMounted, reactive, ref } from 'vue'
 import { ElMessage } from 'element-plus'
 import { Check, Download, Edit } from '@element-plus/icons-vue'
 import api from '../api'
@@ -108,6 +108,8 @@ import { downloadByApi } from '../download'
 import ToolbarSearchInput from '../components/ToolbarSearchInput.vue'
 import ToolbarIconAction from '../components/ToolbarIconAction.vue'
 import StockHeadBar from '../components/StockHeadBar.vue'
+import { useLoadGuard } from '../composables/useLoadGuard'
+import { useRequestLatest } from '../composables/useRequestLatest'
 
 const rows = ref([])
 const total = ref(0)
@@ -127,6 +129,8 @@ const correctOpen = ref(false)
 const correctTarget = reactive({ type: 'in', order_no: '' })
 const correctReason = ref('')
 const correctSubmitting = ref(false)
+const { loading: listLoading, run: runLoad } = useLoadGuard()
+const listRequest = useRequestLatest()
 
 const totalPages = computed(() => Math.max(1, Math.ceil(total.value / pageSize)))
 
@@ -147,24 +151,30 @@ const formatQty = (value) => {
 const formatIndex = (indexOnPage) => String((page.value - 1) * pageSize + indexOnPage + 1).padStart(2, '0')
 
 const load = async () => {
-  try {
-    const { data } = await api.get('/stock-records', {
-      params: {
-        record_type: recordType.value,
-        keyword: keyword.value,
-        page: page.value,
-        page_size: pageSize
+  const token = listRequest.next()
+  await runLoad(
+    async () => {
+      const { data } = await api.get('/stock-records', {
+        params: {
+          record_type: recordType.value,
+          keyword: keyword.value,
+          page: page.value,
+          page_size: pageSize
+        }
+      })
+      if (!listRequest.isLatest(token)) return
+      rows.value = data.items || []
+      total.value = Number(data.total || 0)
+      if (page.value > totalPages.value) {
+        page.value = totalPages.value
+        await load()
       }
-    })
-    rows.value = data.items || []
-    total.value = Number(data.total || 0)
-    if (page.value > totalPages.value) {
-      page.value = totalPages.value
-      await load()
+    },
+    (e) => {
+      if (!listRequest.isLatest(token)) return
+      ElMessage.error(e.response?.data?.detail || '加载记录失败')
     }
-  } catch (e) {
-    ElMessage.error(e.response?.data?.detail || '加载记录失败')
-  }
+  )
 }
 
 const onFilterChange = async () => {
@@ -252,6 +262,10 @@ const correctSelected = () => {
 
 onMounted(() => {
   load()
+})
+
+onBeforeUnmount(() => {
+  listRequest.invalidate()
 })
 </script>
 

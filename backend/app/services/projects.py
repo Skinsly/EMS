@@ -5,11 +5,13 @@ from sqlalchemy.orm import Session
 from ..models import (
     Attachment,
     ConstructionLog,
+    FileCategory,
     Inventory,
     MachineLedger,
     Material,
     ProgressPlanItem,
     Project,
+    ProjectFile,
     StockInItem,
     StockInOrder,
     StockMovement,
@@ -75,6 +77,11 @@ def delete_project_cascade(
                 Attachment.order_id.in_(machine_ledger_ids),
             )
         )
+
+    project_files = db.scalars(select(ProjectFile).where(ProjectFile.project_id == project.id)).all()
+    attachment_paths.extend([row.path for row in project_files if row.path])
+    db.execute(delete(ProjectFile).where(ProjectFile.project_id == project.id))
+    db.execute(delete(FileCategory).where(FileCategory.project_id == project.id))
 
     db.execute(delete(StockMovement).where(StockMovement.project_id == project.id))
     db.execute(delete(StockInOrder).where(StockInOrder.project_id == project.id))

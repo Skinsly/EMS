@@ -25,7 +25,7 @@
         </div>
       </div>
 
-      <el-table class="clickable-table projects-table" :data="projects" border stripe style="margin-top: 12px" @row-click="enterProject" @selection-change="onProjectSelectionChange">
+      <el-table v-loading="projectsLoading" class="clickable-table projects-table" :data="projects" border stripe style="margin-top: 12px" @row-click="enterProject" @selection-change="onProjectSelectionChange">
         <el-table-column type="selection" width="50" />
         <el-table-column prop="name" label="工程名称" min-width="220" />
         <el-table-column prop="start_date" label="开工时间" width="160" />
@@ -123,6 +123,8 @@ import { Check, Delete, Plus, SwitchButton } from '@element-plus/icons-vue'
 import api from '../api'
 import { useAuthStore } from '../store'
 import { formatDateInput } from '../utils/date'
+import { useLoadGuard } from '../composables/useLoadGuard'
+import { useRequestLatest } from '../composables/useRequestLatest'
 
 const router = useRouter()
 const auth = useAuthStore()
@@ -150,11 +152,23 @@ const deleteForm = reactive({
   confirm_text: ''
 })
 const ackPhrase = '我已知晓删除后不可恢复'
+const { loading: projectsLoading, run: runLoad } = useLoadGuard()
+const projectListRequest = useRequestLatest()
 
 const loadProjects = async () => {
-  const { data } = await api.get('/projects')
-  projects.value = data
-  selectedProjects.value = []
+  const token = projectListRequest.next()
+  await runLoad(
+    async () => {
+      const { data } = await api.get('/projects')
+      if (!projectListRequest.isLatest(token)) return
+      projects.value = data
+      selectedProjects.value = []
+    },
+    (e) => {
+      if (!projectListRequest.isLatest(token)) return
+      ElMessage.error(e.response?.data?.detail || '加载工程列表失败')
+    }
+  )
 }
 
 const enterProject = (project) => {
@@ -267,6 +281,7 @@ onMounted(() => {
 })
 
 onBeforeUnmount(() => {
+  projectListRequest.invalidate()
   window.removeEventListener('resize', updateMobileDialog)
   window.removeEventListener('close-all-dialogs', onCloseAllDialogs)
 })

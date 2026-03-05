@@ -13,7 +13,7 @@ from ..bootstrap import is_initialized
 from ..database import engine
 from ..dependencies import is_admin_user
 from ..models import User
-from ..security import decode_access_token
+from ..security import decode_access_token, verify_password
 
 
 def resolve_db_path(data_dir: str, db_path_config: str) -> Path:
@@ -52,7 +52,7 @@ def validate_import_sqlite(db_file: Path) -> None:
         raise HTTPException(status_code=400, detail="数据包不是有效的 SQLite 数据库") from exc
 
 
-def ensure_import_permission(credentials: HTTPAuthorizationCredentials | None) -> None:
+def ensure_import_permission(credentials: HTTPAuthorizationCredentials | None, admin_password: str) -> None:
     try:
         with Session(engine) as db:
             if is_initialized(db):
@@ -66,10 +66,12 @@ def ensure_import_permission(credentials: HTTPAuthorizationCredentials | None) -
                     raise HTTPException(status_code=401, detail="用户不存在")
                 if not is_admin_user(db, user):
                     raise HTTPException(status_code=403, detail="仅管理员可执行此操作")
+                if not verify_password((admin_password or "").strip(), user.password_hash):
+                    raise HTTPException(status_code=400, detail="管理员密码错误")
     except HTTPException:
         raise
-    except Exception:
-        pass
+    except Exception as exc:
+        raise HTTPException(status_code=500, detail="导入权限校验失败") from exc
 
 
 async def import_bootstrap_package_file(
@@ -77,28 +79,39 @@ async def import_bootstrap_package_file(
     credentials: HTTPAuthorizationCredentials | None,
     data_dir: str,
     db_path_config: str,
+    admin_password: str = "",
 ) -> dict:
     db_path = resolve_db_path(data_dir, db_path_config)
-    ensure_import_permission(credentials)
+    ensure_import_permission(credentials, admin_password)
 
     filename = (file.filename or "").lower()
     if not filename.endswith((".db", ".sqlite", ".sqlite3")):
         raise HTTPException(status_code=400, detail="仅支持导入 .db/.sqlite 数据包")
 
-    raw = await file.read()
-    if len(raw) < 1024:
-        raise HTTPException(status_code=400, detail="数据包无效")
-    if len(raw) > 200 * 1024 * 1024:
-        raise HTTPException(status_code=400, detail="数据包超过 200MB")
-
     tmp_dir = Path(tempfile.gettempdir()) / "ems-import"
     tmp_dir.mkdir(parents=True, exist_ok=True)
     tmp_path = tmp_dir / f"import-{uuid4().hex}.db"
     try:
-        if not raw.startswith(b"SQLite format 3\x00"):
-            raise HTTPException(status_code=400, detail="数据包不是有效的 SQLite 数据库")
+        max_bytes = 200 * 1024 * 1024
+        total_size = 0
+        head = b""
         with open(tmp_path, "wb") as fp:
-            fp.write(raw)
+            while True:
+                chunk = await file.read(1024 * 1024)
+                if not chunk:
+                    break
+                if len(head) < 16:
+                    need = 16 - len(head)
+                    head += chunk[:need]
+                total_size += len(chunk)
+                if total_size > max_bytes:
+                    raise HTTPException(status_code=400, detail="数据包超过 200MB")
+                fp.write(chunk)
+
+        if total_size < 1024:
+            raise HTTPException(status_code=400, detail="数据包无效")
+        if not head.startswith(b"SQLite format 3\x00"):
+            raise HTTPException(status_code=400, detail="数据包不是有效的 SQLite 数据库")
 
         validate_import_sqlite(tmp_path)
 

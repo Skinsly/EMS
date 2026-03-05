@@ -12,7 +12,7 @@
       </template>
     </StockHeadBar>
 
-    <el-table class="uniform-row-table clickable-table" :data="rows" border @selection-change="onSelectionChange" @row-click="onRowClick">
+    <el-table v-loading="listLoading" class="uniform-row-table clickable-table" :data="rows" border @selection-change="onSelectionChange" @row-click="onRowClick">
       <el-table-column type="selection" width="50" />
       <el-table-column label="序号" width="70">
         <template #default="scope">
@@ -113,6 +113,8 @@ import api from '../api'
 import ToolbarSearchInput from '../components/ToolbarSearchInput.vue'
 import ToolbarIconAction from '../components/ToolbarIconAction.vue'
 import StockHeadBar from '../components/StockHeadBar.vue'
+import { useLoadGuard } from '../composables/useLoadGuard'
+import { useRequestLatest } from '../composables/useRequestLatest'
 
 const keyword = ref('')
 const allRows = ref([])
@@ -124,6 +126,8 @@ const rows = computed(() => {
   return allRows.value.slice(start, start + pageSize)
 })
 const totalPages = computed(() => Math.max(1, Math.ceil(allRows.value.length / pageSize)))
+const { loading: listLoading, run: runLoad } = useLoadGuard()
+const listRequest = useRequestLatest()
 
 const formatIndex = (index) => String(index + 1).padStart(2, '0')
 const open = ref(false)
@@ -288,12 +292,22 @@ const insertUnitTemplate = (unit) => {
 }
 
 const load = async () => {
-  const { data } = await api.get('/materials', { params: { keyword: keyword.value } })
-  allRows.value = data
-  if (page.value > totalPages.value) {
-    page.value = totalPages.value
-  }
-  selectedIds.value = []
+  const token = listRequest.next()
+  await runLoad(
+    async () => {
+      const { data } = await api.get('/materials', { params: { keyword: keyword.value } })
+      if (!listRequest.isLatest(token)) return
+      allRows.value = data
+      if (page.value > totalPages.value) {
+        page.value = totalPages.value
+      }
+      selectedIds.value = []
+    },
+    (e) => {
+      if (!listRequest.isLatest(token)) return
+      ElMessage.error(e.response?.data?.detail || '加载材料失败')
+    }
+  )
 }
 
 const prevPage = () => {
@@ -388,6 +402,7 @@ onMounted(() => {
 })
 
 onBeforeUnmount(() => {
+  listRequest.invalidate()
   window.removeEventListener('close-all-dialogs', onCloseAllDialogs)
   window.removeEventListener('reset-current-page', onResetEvent)
   window.removeEventListener('resize', onWindowResize)

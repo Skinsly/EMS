@@ -167,6 +167,36 @@ class Attachment(Base):
     created_at: Mapped[datetime] = mapped_column(DateTime, default=_utcnow_naive)
 
 
+class FileCategory(Base):
+    __tablename__ = "file_categories"
+    __table_args__ = (UniqueConstraint("project_id", "name", name="uq_file_category_project_name"),)
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    project_id: Mapped[int] = mapped_column(Integer, index=True)
+    name: Mapped[str] = mapped_column(String(64), index=True)
+    sort_order: Mapped[int] = mapped_column(Integer, default=0)
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=_utcnow_naive)
+
+
+class ProjectFile(Base):
+    __tablename__ = "project_files"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    project_id: Mapped[int] = mapped_column(Integer, index=True)
+    category_id: Mapped[int] = mapped_column(ForeignKey("file_categories.id"), index=True)
+    filename: Mapped[str] = mapped_column(String(255))
+    stored_name: Mapped[str] = mapped_column(String(400), unique=True)
+    path: Mapped[str] = mapped_column(String(400))
+    content_type: Mapped[str] = mapped_column(String(100))
+    size: Mapped[int] = mapped_column(Integer)
+    remark: Mapped[str] = mapped_column(String(255), default="")
+    uploaded_by: Mapped[str] = mapped_column(String(64), default="skins")
+    is_deleted: Mapped[bool] = mapped_column(Boolean, default=False)
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=_utcnow_naive)
+
+    category = relationship("FileCategory")
+
+
 class ConstructionLog(Base):
     __tablename__ = "construction_logs"
 
@@ -229,3 +259,13 @@ class MachineLedger(Base):
     shift_count: Mapped[Decimal] = mapped_column(Numeric(12, 3), default=Decimal("0.000"))
     remark: Mapped[str] = mapped_column(String(255), default="")
     created_at: Mapped[datetime] = mapped_column(DateTime, default=_utcnow_naive, index=True)
+
+
+class UserProjectAccess(Base):
+    __tablename__ = "user_project_access"
+    __table_args__ = (UniqueConstraint("user_id", "project_id", name="uq_user_project_access"),)
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    user_id: Mapped[int] = mapped_column(Integer, index=True)
+    project_id: Mapped[int] = mapped_column(Integer, index=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=_utcnow_naive)

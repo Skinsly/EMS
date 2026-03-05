@@ -15,7 +15,7 @@
       </template>
     </StockHeadBar>
 
-    <el-table class="uniform-row-table clickable-table" :data="rows" border @selection-change="onSelectionChange" @row-click="openDetailByRow">
+    <el-table v-loading="listLoading" class="uniform-row-table clickable-table" :data="rows" border @selection-change="onSelectionChange" @row-click="openDetailByRow">
       <el-table-column type="selection" width="50" />
       <el-table-column label="序号" width="70">
         <template #default="scope">{{ formatIndex(scope.$index) }}</template>
@@ -137,6 +137,8 @@ import ToolbarSearchInput from '../components/ToolbarSearchInput.vue'
 import ToolbarIconAction from '../components/ToolbarIconAction.vue'
 import StockHeadBar from '../components/StockHeadBar.vue'
 import { formatDateInput } from '../utils/date'
+import { useRequestLatest } from '../composables/useRequestLatest'
+import { useLoadGuard } from '../composables/useLoadGuard'
 
 const allRows = ref([])
 const keyword = ref('')
@@ -157,6 +159,9 @@ const detailId = ref(0)
 const detailRow = reactive({ name: '', spec: '', use_date: '', shift_count: '', remark: '' })
 const detailPhotos = ref([])
 const detailPhotoUrls = ref([])
+const detailRequest = useRequestLatest()
+const listRequest = useRequestLatest()
+const { loading: listLoading, run: runLoad } = useLoadGuard()
 
 const photoFileList = ref([])
 const originalPhotoIds = ref([])
@@ -204,9 +209,19 @@ const loadAttachmentPreviewUrl = async (id) => {
 }
 
 const load = async () => {
-  const { data } = await api.get('/machine-ledger', { params: { keyword: keyword.value } })
-  allRows.value = data
-  if (page.value > totalPages.value) page.value = totalPages.value
+  const token = listRequest.next()
+  await runLoad(
+    async () => {
+      const { data } = await api.get('/machine-ledger', { params: { keyword: keyword.value } })
+      if (!listRequest.isLatest(token)) return
+      allRows.value = data
+      if (page.value > totalPages.value) page.value = totalPages.value
+    },
+    (e) => {
+      if (!listRequest.isLatest(token)) return
+      ElMessage.error(e.response?.data?.detail || '加载机械台账失败')
+    }
+  )
 }
 
 const download = async () => {
@@ -339,27 +354,36 @@ const editRow = async (row) => {
 }
 
 const openDetailByRow = (row) => {
+  const token = detailRequest.next()
   detailId.value = Number(row.id || 0)
   detailRow.name = row.name || ''
   detailRow.spec = row.spec || ''
   detailRow.use_date = row.use_date || ''
   detailRow.shift_count = row.shift_count || ''
   detailRow.remark = row.remark || ''
-  loadDetailPhotos()
+  loadDetailPhotos(token)
 }
-const loadDetailPhotos = async () => {
+const loadDetailPhotos = async (token) => {
   clearDetailPhotos()
   try {
     const { data } = await api.get(`/attachments?order_type=machine_ledger&order_id=${detailId.value}`)
+    if (!detailRequest.isLatest(token)) return
     const photos = await Promise.all((data || []).map(async (a) => ({ ...a, previewUrl: await loadAttachmentPreviewUrl(a.id) })))
+    if (!detailRequest.isLatest(token)) {
+      photos.forEach((item) => revokeObjectUrl(item.previewUrl))
+      return
+    }
     detailPhotos.value = photos
     detailPhotoUrls.value = photos.map((p) => p.previewUrl)
   } catch {
+    if (!detailRequest.isLatest(token)) return
     detailPhotos.value = []
   }
+  if (!detailRequest.isLatest(token)) return
   detailOpen.value = true
 }
 const closeDetailDialog = () => {
+  detailRequest.invalidate()
   detailOpen.value = false
   detailId.value = 0
   clearDetailPhotos()
@@ -393,6 +417,8 @@ const nextPage = () => {
 
 onMounted(load)
 onBeforeUnmount(() => {
+  listRequest.invalidate()
+  detailRequest.invalidate()
   clearPhotoFiles()
   clearDetailPhotos()
 })

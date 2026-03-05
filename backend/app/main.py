@@ -5,7 +5,7 @@ from contextlib import asynccontextmanager
 from datetime import datetime
 from pathlib import Path
 
-from fastapi import Body, Depends, FastAPI, File, Header, HTTPException, Query, UploadFile
+from fastapi import Body, Depends, FastAPI, File, Form, Header, HTTPException, Query, UploadFile
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse, StreamingResponse
 from fastapi.security import HTTPAuthorizationCredentials
@@ -37,12 +37,16 @@ from .models import (
     StockOutItem,
     StockOutOrder,
     User,
+    UserProjectAccess,
     Warehouse,
 )
 from .schemas import (
     BootstrapInitRequest,
     ConstructionLogCreate,
     ConstructionLogUpdate,
+    FileCategoryCreate,
+    FileCategoryDeleteRequest,
+    FileCategoryRename,
     InventoryDeleteRequest,
     LoginRequest,
     MaterialCreate,
@@ -93,6 +97,17 @@ from .services.materials_inventory import (
     update_material as _update_material,
 )
 from .services.projects import delete_project_cascade as _delete_project_cascade
+from .services.project_files import (
+    create_category as _create_file_category,
+    delete_category as _delete_file_category,
+    delete_project_file as _delete_project_file,
+    download_project_file as _download_project_file,
+    ensure_all_projects_default_categories as _ensure_all_projects_default_categories,
+    list_categories as _list_file_categories,
+    list_project_files as _list_project_files,
+    rename_category as _rename_file_category,
+    upload_project_file as _upload_project_file,
+)
 from .utils.number_format import dec_fixed_3
 from .services.attachments import (
     ALLOWED_CONTENT_TYPES,
@@ -122,6 +137,8 @@ async def lifespan(_: FastAPI):
     _ensure_schema_updates()
     with Session(engine) as db:
         _seed_data(db)
+        _ensure_user_project_access(db)
+        _ensure_all_projects_default_categories(db)
         cleanup_expired_idempotency(db)
         _normalize_machine_photo_filenames(db)
         _normalize_attachment_storage(db)
@@ -165,6 +182,28 @@ def _seed_data(db: Session) -> None:
     db.commit()
 
 
+def _ensure_user_project_access(db: Session) -> None:
+    users = db.scalars(select(User).where(User.is_active.is_(True))).all()
+    projects = db.scalars(select(Project).where(Project.is_active.is_(True))).all()
+    if not users or not projects:
+        return
+    existing_pairs = {
+        (int(row.user_id), int(row.project_id))
+        for row in db.scalars(select(UserProjectAccess)).all()
+    }
+    changed = False
+    for user in users:
+        for project in projects:
+            key = (int(user.id), int(project.id))
+            if key in existing_pairs:
+                continue
+            db.add(UserProjectAccess(user_id=user.id, project_id=project.id))
+            existing_pairs.add(key)
+            changed = True
+    if changed:
+        db.commit()
+
+
 def _ensure_schema_updates() -> None:
     with engine.begin() as conn:
         def has_column(table: str, column: str) -> bool:
@@ -197,6 +236,60 @@ def _ensure_schema_updates() -> None:
                 """
             )
         )
+        conn.execute(
+            text(
+                """
+                CREATE TABLE IF NOT EXISTS file_categories (
+                  id INTEGER PRIMARY KEY,
+                  project_id INTEGER NOT NULL,
+                  name VARCHAR(64) NOT NULL,
+                  sort_order INTEGER NOT NULL DEFAULT 0,
+                  created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+                  CONSTRAINT uq_file_category_project_name UNIQUE (project_id, name)
+                )
+                """
+            )
+        )
+        conn.execute(text("CREATE INDEX IF NOT EXISTS ix_file_categories_project_id ON file_categories(project_id)"))
+        conn.execute(text("CREATE INDEX IF NOT EXISTS ix_file_categories_name ON file_categories(name)"))
+        conn.execute(
+            text(
+                """
+                CREATE TABLE IF NOT EXISTS project_files (
+                  id INTEGER PRIMARY KEY,
+                  project_id INTEGER NOT NULL,
+                  category_id INTEGER NOT NULL,
+                  filename VARCHAR(255) NOT NULL,
+                  stored_name VARCHAR(400) NOT NULL UNIQUE,
+                  path VARCHAR(400) NOT NULL,
+                  content_type VARCHAR(100) NOT NULL,
+                  size INTEGER NOT NULL,
+                  remark VARCHAR(255) NOT NULL DEFAULT '',
+                  uploaded_by VARCHAR(64) NOT NULL DEFAULT 'skins',
+                  is_deleted BOOLEAN NOT NULL DEFAULT 0,
+                  created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+                  FOREIGN KEY(category_id) REFERENCES file_categories(id)
+                )
+                """
+            )
+        )
+        conn.execute(text("CREATE INDEX IF NOT EXISTS ix_project_files_project_id ON project_files(project_id)"))
+        conn.execute(text("CREATE INDEX IF NOT EXISTS ix_project_files_category_id ON project_files(category_id)"))
+        conn.execute(
+            text(
+                """
+                CREATE TABLE IF NOT EXISTS user_project_access (
+                  id INTEGER PRIMARY KEY,
+                  user_id INTEGER NOT NULL,
+                  project_id INTEGER NOT NULL,
+                  created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+                  CONSTRAINT uq_user_project_access UNIQUE (user_id, project_id)
+                )
+                """
+            )
+        )
+        conn.execute(text("CREATE INDEX IF NOT EXISTS ix_user_project_access_user_id ON user_project_access(user_id)"))
+        conn.execute(text("CREATE INDEX IF NOT EXISTS ix_user_project_access_project_id ON user_project_access(project_id)"))
         if not has_column("machine_ledger", "spec"):
             conn.execute(text("ALTER TABLE machine_ledger ADD COLUMN spec VARCHAR(200) NOT NULL DEFAULT ''"))
         if not has_column("machine_ledger", "use_date"):
@@ -293,12 +386,26 @@ def create_project(payload: ProjectCreate, db: Session = Depends(get_db), _: Use
     if exists and not exists.is_active:
         exists.is_active = True
         exists.start_date = payload.start_date.strip()
+        users = db.scalars(select(User).where(User.is_active.is_(True))).all()
+        existing_access = {
+            int(uid)
+            for uid in db.scalars(
+                select(UserProjectAccess.user_id).where(UserProjectAccess.project_id == exists.id)
+            ).all()
+        }
+        for user in users:
+            if int(user.id) not in existing_access:
+                db.add(UserProjectAccess(user_id=user.id, project_id=exists.id))
         db.commit()
         db.refresh(exists)
         return {"id": exists.id}
 
     row = Project(name=name, start_date=payload.start_date.strip(), location="")
     db.add(row)
+    db.flush()
+    users = db.scalars(select(User).where(User.is_active.is_(True))).all()
+    for user in users:
+        db.add(UserProjectAccess(user_id=user.id, project_id=row.id))
     db.commit()
     db.refresh(row)
     return {"id": row.id}
@@ -336,6 +443,114 @@ def delete_project(
         password_ok=password_ok,
         confirm_ok=confirm_ok,
     )
+
+
+@app.get("/api/file-categories")
+def list_file_categories(
+    db: Session = Depends(get_db),
+    _: User = Depends(_require_user),
+    project: Project = Depends(_require_project),
+) -> list[dict]:
+    return _list_file_categories(db, project)
+
+
+@app.post("/api/file-categories")
+def create_file_category(
+    payload: FileCategoryCreate,
+    db: Session = Depends(get_db),
+    _: User = Depends(_require_user),
+    project: Project = Depends(_require_project),
+) -> dict:
+    return _create_file_category(payload.name, db, project)
+
+
+@app.put("/api/file-categories/{category_id}")
+def rename_file_category(
+    category_id: int,
+    payload: FileCategoryRename,
+    db: Session = Depends(get_db),
+    _: User = Depends(_require_user),
+    project: Project = Depends(_require_project),
+) -> dict:
+    return _rename_file_category(category_id, payload.name, db, project)
+
+
+@app.delete("/api/file-categories/{category_id}")
+def delete_file_category(
+    category_id: int,
+    payload: FileCategoryDeleteRequest,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(_require_user),
+    project: Project = Depends(_require_project),
+) -> dict:
+    return _delete_file_category(
+        category_id=category_id,
+        password=payload.password,
+        delete_files_confirmed=payload.delete_files_confirmed,
+        db=db,
+        current_user=current_user,
+        project=project,
+    )
+
+
+@app.post("/api/project-files/upload")
+async def upload_project_file(
+    category_id: int,
+    remark: str = "",
+    file: UploadFile = File(...),
+    db: Session = Depends(get_db),
+    current_user: User = Depends(_require_user),
+    project: Project = Depends(_require_project),
+) -> dict:
+    return await _upload_project_file(
+        category_id=category_id,
+        remark=remark,
+        file=file,
+        db=db,
+        current_user=current_user,
+        project=project,
+    )
+
+
+@app.get("/api/project-files")
+def list_project_files(
+    keyword: str = "",
+    category_id: int | None = Query(default=None),
+    db: Session = Depends(get_db),
+    _: User = Depends(_require_user),
+    project: Project = Depends(_require_project),
+) -> list[dict]:
+    return _list_project_files(keyword=keyword, category_id=category_id, db=db, project=project)
+
+
+@app.get("/api/project-files/{file_id}/download")
+def download_project_file(
+    file_id: int,
+    db: Session = Depends(get_db),
+    _: User = Depends(_require_user),
+    project: Project = Depends(_require_project),
+) -> FileResponse:
+    return _download_project_file(file_id=file_id, db=db, project=project, inline=False)
+
+
+@app.get("/api/project-files/{file_id}/preview")
+def preview_project_file(
+    file_id: int,
+    db: Session = Depends(get_db),
+    _: User = Depends(_require_user),
+    project: Project = Depends(_require_project),
+) -> FileResponse:
+    return _download_project_file(file_id=file_id, db=db, project=project, inline=True)
+
+
+@app.delete("/api/project-files/{file_id}")
+def delete_project_file(
+    file_id: int,
+    db: Session = Depends(get_db),
+    _: User = Depends(_require_user),
+    project: Project = Depends(_require_project),
+) -> dict:
+    return _delete_project_file(file_id=file_id, db=db, project=project)
 
 
 @app.post("/api/construction-logs")
@@ -964,6 +1179,7 @@ def export_database(_: User = Depends(_require_admin)) -> FileResponse:
 @app.post("/api/bootstrap/import-package")
 async def import_bootstrap_package(
     file: UploadFile = File(...),
+    admin_password: str = Form(default=""),
     credentials: HTTPAuthorizationCredentials | None = Depends(security),
 ) -> dict:
     _ensure_dirs()
@@ -972,6 +1188,7 @@ async def import_bootstrap_package(
         credentials=credentials,
         data_dir=settings.data_dir,
         db_path_config=settings.db_path,
+        admin_password=admin_password,
     )
 
 
@@ -1004,9 +1221,19 @@ async def upload_attachment(
     if not is_image_upload and content_type not in ALLOWED_CONTENT_TYPES:
         raise HTTPException(status_code=400, detail="仅支持图片和PDF")
 
-    content = await file.read()
-    if len(content) > MAX_UPLOAD_SIZE:
-        raise HTTPException(status_code=400, detail="文件超过10MB")
+    content = bytearray()
+    total_size = 0
+    while True:
+        chunk = await file.read(1024 * 1024)
+        if not chunk:
+            break
+        total_size += len(chunk)
+        if total_size > MAX_UPLOAD_SIZE:
+            raise HTTPException(status_code=400, detail="文件超过10MB")
+        content.extend(chunk)
+    if total_size <= 0:
+        raise HTTPException(status_code=400, detail="文件内容为空")
+    content = bytes(content)
 
     if order_type == "construction_log" and is_image_upload:
         current_count = db.scalar(

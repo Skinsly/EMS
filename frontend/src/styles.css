@@ -458,7 +458,8 @@ body,
 .stock-records-page .stock-page-head .stock-page-title,
 .inventory-manage-page .stock-page-head .stock-page-title,
 .machine-manage-page .stock-page-head .stock-page-title,
-.photos-manage-page .stock-page-head .stock-page-title {
+.photos-manage-page .stock-page-head .stock-page-title,
+.file-manage-page .stock-page-head .stock-page-title {
   border-color: var(--page-title-tip-border);
   background: linear-gradient(145deg, var(--page-title-tip-bg-start), var(--page-title-tip-bg-end));
   color: var(--page-title-tip-text);
@@ -467,7 +468,8 @@ body,
 
 .stock-manage-page,
 .stock-records-page,
-.photos-manage-page {
+.photos-manage-page,
+.file-manage-page {
   --segment-shell-border: var(--page-title-tip-border);
   --segment-shell-bg: linear-gradient(145deg, var(--page-title-tip-bg-start), var(--page-title-tip-bg-end));
   --segment-text: color-mix(in oklab, var(--page-title-tip-text) 80%, var(--muted) 20%);
@@ -485,7 +487,8 @@ body,
   .stock-records-page .stock-page-head .stock-page-title,
   .inventory-manage-page .stock-page-head .stock-page-title,
   .machine-manage-page .stock-page-head .stock-page-title,
-  .photos-manage-page .stock-page-head .stock-page-title {
+  .photos-manage-page .stock-page-head .stock-page-title,
+  .file-manage-page .stock-page-head .stock-page-title {
     display: inline-flex;
     align-items: center;
     justify-content: center;
@@ -1975,6 +1978,7 @@ a:focus-visible {
   .machine-manage-page .stock-page-title,
   .inventory-manage-page .stock-page-title,
   .photos-manage-page .stock-page-title,
+  .file-manage-page .stock-page-title,
   .progress-manage-page .stock-page-title {
     grid-area: title;
     margin: 0;
