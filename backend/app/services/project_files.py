@@ -4,7 +4,7 @@ from urllib.parse import quote
 
 from fastapi import HTTPException, UploadFile
 from fastapi.responses import FileResponse
-from sqlalchemy import and_, func, select
+from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
 from ..models import FileCategory, Project, ProjectFile, User
