@@ -1,6 +1,6 @@
 # 工程管理系统 (EMS)
 
-面向工程现场的轻量管理系统，提供工程切换、施工日志、进度计划、材料与库存、机械台账、现场照片等能力。
+面向工程现场的轻量管理系统，提供工程切换、施工日志、进度计划、材料与库存、机械台账、现场照片、文件管理等能力。
 
 ## 功能概览
 
@@ -12,6 +12,8 @@
 - 库存台账与导出
 - 机械台账与导出
 - 现场照片筛选、预览、删除
+- 文件管理（项目级分类、上传、预览、下载、删除）
+- 数据包导入（未初始化可直接导入；已初始化需管理员登录并输入管理员密码）
 
 ## 技术栈
 
@@ -57,8 +59,9 @@ Windows 使用仓库内置 Node 时，请先临时加入 PATH（避免 `node not
 ```bash
 set PATH=%CD%\tools\node22;%PATH%
 cd frontend
-tools\node22\npm.cmd ci
-tools\node22\npm.cmd run build
+..\tools\node22\npm.cmd ci
+..\tools\node22\npm.cmd run lint
+..\tools\node22\npm.cmd run build
 ```
 
 若系统 `python` 命令不可用，可使用仓库内置 Python（Windows）：
@@ -132,6 +135,7 @@ docker compose --env-file deploy/.env -f deploy/docker-compose.yml up -d --build
 - `backend/app/dependencies.py`：认证、管理员校验、工程上下文校验
 - `backend/app/services/bootstrap_import.py`：导入 SQLite 数据包流程与校验
 - `backend/app/services/attachments.py`：附件上传/命名/路径安全/清理与归一化
+- `backend/app/services/project_files.py`：项目文件管理（分类、上传、预览、下载、删除）
 - `backend/app/services/stock_flow.py`：入库、出库、草稿入账、记录更正
 - `backend/app/services/logs_and_ledger.py`：施工日志与机械台账业务
 - `backend/app/services/materials_inventory.py`：材料与库存业务
