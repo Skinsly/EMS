@@ -34,7 +34,6 @@
 
 <script setup>
 import { onBeforeUnmount, onMounted, ref } from 'vue'
-import { ElMessage } from 'element-plus'
 import { Download } from '@element-plus/icons-vue'
 import api from '../api'
 import { downloadByApi } from '../download'
