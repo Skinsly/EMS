@@ -2,7 +2,7 @@ import json
 import re
 from urllib.parse import quote
 from contextlib import asynccontextmanager
-from datetime import datetime
+from datetime import datetime, timezone
 from pathlib import Path
 
 from fastapi import Body, Depends, FastAPI, File, Form, Header, HTTPException, Query, UploadFile
@@ -220,6 +220,8 @@ def _ensure_schema_updates() -> None:
             conn.execute(text("ALTER TABLE stock_movements ADD COLUMN project_id INTEGER DEFAULT 0"))
         if not has_column("construction_logs", "created_by"):
             conn.execute(text("ALTER TABLE construction_logs ADD COLUMN created_by TEXT NOT NULL DEFAULT ''"))
+        if not has_column("attachments", "deleted_at"):
+            conn.execute(text("ALTER TABLE attachments ADD COLUMN deleted_at DATETIME"))
         conn.execute(
             text(
                 """
@@ -400,7 +402,7 @@ def create_project(payload: ProjectCreate, db: Session = Depends(get_db), _: Use
         db.refresh(exists)
         return {"id": exists.id}
 
-    row = Project(name=name, start_date=payload.start_date.strip(), location="")
+    row = Project(name=name, start_date=payload.start_date.strip())
     db.add(row)
     db.flush()
     users = db.scalars(select(User).where(User.is_active.is_(True))).all()
@@ -419,7 +421,6 @@ def list_projects(db: Session = Depends(get_db), _: User = Depends(_require_user
             "id": p.id,
             "name": p.name,
             "start_date": p.start_date,
-            "location": p.location,
             "created_at": p.created_at.isoformat(),
         }
         for p in rows
@@ -516,11 +517,13 @@ async def upload_project_file(
 def list_project_files(
     keyword: str = "",
     category_id: int | None = Query(default=None),
+    page: int | None = Query(default=None, ge=1),
+    page_size: int | None = Query(default=None, ge=1, le=100),
     db: Session = Depends(get_db),
     _: User = Depends(_require_user),
     project: Project = Depends(_require_project),
-) -> list[dict]:
-    return _list_project_files(keyword=keyword, category_id=category_id, db=db, project=project)
+) -> list[dict] | dict:
+    return _list_project_files(keyword=keyword, category_id=category_id, db=db, project=project, page=page, page_size=page_size)
 
 
 @app.get("/api/project-files/{file_id}/download")
@@ -565,11 +568,14 @@ def create_construction_log(
 
 @app.get("/api/construction-logs")
 def list_construction_logs(
+    keyword: str = "",
+    page: int | None = Query(default=None, ge=1),
+    page_size: int | None = Query(default=None, ge=1, le=100),
     db: Session = Depends(get_db),
     _: User = Depends(_require_user),
     project: Project = Depends(_require_project),
-) -> list[dict]:
-    return _list_construction_logs(db, project)
+) -> list[dict] | dict:
+    return _list_construction_logs(db, project, keyword=keyword, page=page, page_size=page_size)
 
 
 @app.put("/api/construction-logs/{log_id}")
@@ -702,11 +708,13 @@ def create_material(
 @app.get("/api/materials")
 def list_materials(
     keyword: str = "",
+    page: int | None = Query(default=None, ge=1),
+    page_size: int | None = Query(default=None, ge=1, le=100),
     db: Session = Depends(get_db),
     _: User = Depends(_require_user),
     project: Project = Depends(_require_project),
-) -> list[dict]:
-    return _list_materials(keyword, db, project)
+) -> list[dict] | dict:
+    return _list_materials(keyword, db, project, page=page, page_size=page_size)
 
 
 @app.put("/api/materials/{material_id}")
@@ -1090,21 +1098,25 @@ def stock_record_detail(
 @app.get("/api/inventory")
 def inventory_list(
     keyword: str = "",
+    page: int | None = Query(default=None, ge=1),
+    page_size: int | None = Query(default=None, ge=1, le=100),
     db: Session = Depends(get_db),
     _: User = Depends(_require_user),
     project: Project = Depends(_require_project),
-) -> list[dict]:
-    return _inventory_list(keyword, db, project)
+) -> list[dict] | dict:
+    return _inventory_list(keyword, db, project, page=page, page_size=page_size)
 
 
 @app.get("/api/machine-ledger")
 def machine_ledger_list(
     keyword: str = "",
+    page: int | None = Query(default=None, ge=1),
+    page_size: int | None = Query(default=None, ge=1, le=100),
     db: Session = Depends(get_db),
     _: User = Depends(_require_user),
     project: Project = Depends(_require_project),
-) -> list[dict]:
-    return _machine_ledger_list(keyword, db, project)
+) -> list[dict] | dict:
+    return _machine_ledger_list(keyword, db, project, page=page, page_size=page_size)
 
 
 @app.post("/api/machine-ledger")
@@ -1377,6 +1389,7 @@ def delete_attachment(
     if _target_project_id_for_attachment(db, row.order_type, row.order_id) != project.id:
         raise HTTPException(status_code=403, detail="无权访问该工程附件")
     row.is_deleted = True
+    row.deleted_at = datetime.now(timezone.utc).replace(tzinfo=None)
     db.commit()
     return {"ok": True}
 

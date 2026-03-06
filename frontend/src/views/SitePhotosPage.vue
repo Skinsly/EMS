@@ -27,12 +27,13 @@
     </StockHeadBar>
 
     <div v-loading="listLoading" class="photos-content">
-      <el-empty v-if="!rows.length && !listLoading" description="暂无现场照片" />
+      <el-empty v-if="!visibleRows.length && !listLoading" description="暂无现场照片" />
 
       <div :class="['photo-grid', { 'is-animating': gridAnimating }]" :style="photoGridStyle">
-        <div v-for="(photo, index) in rows" :key="photo.id" class="photo-card" :title="`大小：${formatSize(photo.size)}`">
+        <div v-for="(photo, index) in visibleRows" :key="photo.id" class="photo-card" :title="`大小：${formatSize(photo.size)}`">
           <div class="photo-date-tag">{{ photo.log_date || '未填写日期' }}</div>
           <el-image
+            v-if="photo.previewUrl"
             :class="['photo-thumb', { 'is-landscape': photo.isLandscape }]"
             :src="photo.previewUrl"
             :preview-src-list="previewUrls"
@@ -41,6 +42,11 @@
             preview-teleported
             hide-on-click-modal
           />
+          <div v-else class="photo-thumb photo-thumb-placeholder" aria-hidden="true">
+            <div class="photo-skeleton photo-skeleton-shimmer"></div>
+            <div class="photo-skeleton photo-skeleton-line photo-skeleton-line-wide"></div>
+            <div class="photo-skeleton photo-skeleton-line photo-skeleton-line-short"></div>
+          </div>
           <button class="photo-remove-btn" type="button" aria-label="删除照片" @click="remove(photo)">×</button>
           <button class="photo-action-btn photo-download-btn" type="button" aria-label="下载照片" @click="forceDownloadAttachment(photo.id)">↓</button>
           <div class="photo-meta-overlay"></div>
@@ -62,6 +68,7 @@ import { useRequestLatest } from '../composables/useRequestLatest'
 import { useLoadGuard } from '../composables/useLoadGuard'
 
 const allRows = ref([])
+const visibleRows = ref([])
 const page = ref(1)
 const photoCols = ref(5)
 const isMobileLayout = ref(window.matchMedia('(max-width: 900px)').matches)
@@ -184,8 +191,8 @@ const revokeObjectUrl = (url) => {
   }
 }
 
-const clearPreviewUrls = () => {
-  allRows.value.forEach((item) => revokeObjectUrl(item.previewUrl))
+const clearPreviewUrls = (rows = visibleRows.value) => {
+  rows.forEach((item) => revokeObjectUrl(item.previewUrl))
 }
 
 const filteredRows = computed(() => {
@@ -197,7 +204,7 @@ const filteredRows = computed(() => {
   return list.filter((item) => item.log_date === selectedDate.value)
 })
 
-const rows = computed(() => {
+const pagedRows = computed(() => {
   const start = (page.value - 1) * pageSize.value
   return filteredRows.value.slice(start, start + pageSize.value)
 })
@@ -271,6 +278,7 @@ const photoGridGap = computed(() => {
 let pageResizeObserver = null
 let gridAnimationTimer = null
 const loadRequest = useRequestLatest()
+const previewRequest = useRequestLatest()
 
 const triggerGridAnimation = () => {
   if (gridAnimationTimer) {
@@ -287,12 +295,47 @@ const triggerGridAnimation = () => {
   })
 }
 
-const previewUrls = computed(() => rows.value.map((item) => item.previewUrl))
+const previewUrls = computed(() => visibleRows.value.map((item) => item.previewUrl).filter(Boolean))
 
 const formatSize = (size) => {
   if (size < 1024) return `${size} B`
   if (size < 1024 * 1024) return `${(size / 1024).toFixed(1)} KB`
   return `${(size / (1024 * 1024)).toFixed(1)} MB`
+}
+
+const loadVisiblePreviews = async () => {
+  const token = previewRequest.next()
+  const previousRows = visibleRows.value
+  const baseRows = pagedRows.value.map((item) => ({
+    ...item,
+    previewUrl: '',
+    isLandscape: false
+  }))
+
+  clearPreviewUrls(previousRows)
+  visibleRows.value = baseRows
+  if (!baseRows.length) {
+    return
+  }
+
+  try {
+    const hydratedRows = await Promise.all(
+      baseRows.map(async (item) => ({
+        ...item,
+        ...(await loadAttachmentPreviewUrl(item.id))
+      }))
+    )
+    if (!previewRequest.isLatest(token)) {
+      clearPreviewUrls(hydratedRows)
+      return
+    }
+    visibleRows.value = hydratedRows
+  } catch (e) {
+    if (!previewRequest.isLatest(token)) return
+    clearPreviewUrls()
+    visibleRows.value = baseRows
+    ElMessage.error(e.response?.data?.detail || '加载照片预览失败')
+  }
 }
 
 const load = async () => {
@@ -301,19 +344,11 @@ const load = async () => {
     async () => {
       const { data } = await api.get('/site-photos')
       if (!loadRequest.isLatest(token)) return
-      const previousRows = allRows.value
-      const withPreview = await Promise.all(
-        data.map(async (item) => ({
-          ...item,
-          ...(await loadAttachmentPreviewUrl(item.id))
+      allRows.value = data
+        .map((item) => ({
+          ...item
         }))
-      )
-      if (!loadRequest.isLatest(token)) {
-        withPreview.forEach((item) => revokeObjectUrl(item.previewUrl))
-        return
-      }
-      previousRows.forEach((item) => revokeObjectUrl(item.previewUrl))
-      allRows.value = withPreview.sort((a, b) => {
+        .sort((a, b) => {
         const dateCompare = String(b.log_date || '').localeCompare(String(a.log_date || ''))
         if (dateCompare !== 0) return dateCompare
         return Number(b.id || 0) - Number(a.id || 0)
@@ -321,6 +356,7 @@ const load = async () => {
       if (page.value > totalPages.value) {
         page.value = totalPages.value
       }
+      await loadVisiblePreviews()
     },
     (e) => {
       if (!loadRequest.isLatest(token)) return
@@ -367,6 +403,10 @@ watch(pageSize, () => {
   }
 })
 
+watch(pagedRows, () => {
+  loadVisiblePreviews()
+})
+
 watch(selectedDate, () => {
   dateFilterActivated.value = true
   page.value = 1
@@ -386,6 +426,7 @@ onMounted(() => {
 
 onBeforeUnmount(() => {
   loadRequest.invalidate()
+  previewRequest.invalidate()
   clearPreviewUrls()
   window.removeEventListener('reset-current-page', onResetEvent)
   window.removeEventListener('resize', updatePhotoCols)
@@ -476,23 +517,17 @@ onBeforeUnmount(() => {
   border: 1px solid var(--border);
   border-radius: 12px;
   overflow: hidden;
-  background: var(--panel-solid);
+  background: color-mix(in oklab, var(--surface-2) 92%, var(--bg) 8%);
   min-width: 0;
 }
 
 .photo-grid.is-animating .photo-card {
-  animation: photo-grid-pop 340ms var(--motion-ease);
+  animation: none;
 }
 
-@keyframes photo-grid-pop {
-  0% {
-    opacity: 0;
-    transform: translateY(10px) scale(0.98);
-  }
-
+@keyframes photo-skeleton-sweep {
   100% {
-    opacity: 1;
-    transform: translateY(0) scale(1);
+    transform: translateX(100%);
   }
 }
 
@@ -500,7 +535,89 @@ onBeforeUnmount(() => {
   width: 100%;
   aspect-ratio: 4 / 3;
   display: block;
-  background: color-mix(in oklab, var(--surface-1) 74%, transparent);
+  background: color-mix(in oklab, var(--surface-2) 88%, var(--bg) 12%);
+}
+
+.photo-thumb-placeholder {
+  position: relative;
+  padding: 14px;
+  display: flex;
+  flex-direction: column;
+  justify-content: flex-end;
+  gap: 8px;
+  border: 1px solid color-mix(in oklab, var(--divider-strong) 62%, transparent);
+  box-shadow: inset 0 1px 0 color-mix(in oklab, #ffffff 28%, transparent);
+}
+
+.photo-thumb-placeholder::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(135deg, color-mix(in oklab, var(--surface-1) 26%, transparent), transparent 55%);
+  pointer-events: none;
+}
+
+.photo-thumb-placeholder::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  background: radial-gradient(circle at 22% 18%, color-mix(in oklab, #ffffff 12%, transparent), transparent 42%);
+  pointer-events: none;
+}
+
+.photo-skeleton {
+  position: relative;
+  z-index: 1;
+  border-radius: 10px;
+  background: color-mix(in oklab, var(--surface-1) 58%, var(--surface-3) 42%);
+  overflow: hidden;
+  border: 1px solid color-mix(in oklab, var(--divider-strong) 36%, transparent);
+  box-shadow: inset 0 1px 0 color-mix(in oklab, #ffffff 18%, transparent);
+}
+
+.photo-skeleton-shimmer {
+  flex: 1;
+  min-height: 0;
+  min-height: 52%;
+}
+
+.photo-skeleton-line {
+  height: 10px;
+}
+
+.photo-skeleton-line-wide {
+  width: 68%;
+}
+
+.photo-skeleton-line-short {
+  width: 42%;
+}
+
+.photo-skeleton::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(90deg, transparent 0%, rgba(255, 255, 255, 0.2) 48%, transparent 100%);
+  transform: translateX(-100%);
+  animation: photo-skeleton-sweep 1.4s ease-in-out infinite;
+}
+
+:root[data-theme='dark'] .photo-thumb-placeholder {
+  border-color: color-mix(in oklab, var(--divider-strong) 84%, transparent);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.05), inset 0 -12px 24px rgba(4, 8, 16, 0.18);
+}
+
+:root[data-theme='dark'] .photo-thumb-placeholder::before {
+  background: radial-gradient(circle at 22% 18%, rgba(255, 255, 255, 0.05), transparent 42%);
+}
+
+:root[data-theme='dark'] .photo-skeleton {
+  border-color: color-mix(in oklab, var(--divider-strong) 72%, transparent);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.04), inset 0 -8px 16px rgba(3, 7, 14, 0.14);
+}
+
+:root[data-theme='dark'] .photo-skeleton::before {
+  background: linear-gradient(90deg, transparent 0%, rgba(255, 255, 255, 0.08) 48%, transparent 100%);
 }
 
 .photo-thumb :deep(.el-image__wrapper),
@@ -508,6 +625,17 @@ onBeforeUnmount(() => {
   width: 100%;
   height: 100%;
   display: block;
+}
+
+.photo-thumb :deep(.el-image__wrapper),
+.photo-thumb :deep(.el-image__placeholder),
+.photo-thumb :deep(.el-image__error) {
+  background: color-mix(in oklab, var(--surface-2) 88%, var(--bg) 12%) !important;
+}
+
+.photos-content :deep(.el-loading-mask) {
+  background: color-mix(in oklab, var(--surface-2) 82%, transparent) !important;
+  backdrop-filter: blur(3px);
 }
 
 .photo-thumb :deep(.el-image__inner) {

@@ -80,5 +80,10 @@ export default defineConfig({
         changeOrigin: true
       }
     }
+  },
+  test: {
+    environment: 'jsdom',
+    globals: true,
+    clearMocks: true
   }
 })

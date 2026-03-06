@@ -72,6 +72,15 @@ def default_warehouse(db: Session, auto_commit: bool = True) -> Warehouse:
     return row
 
 
+def resolve_warehouse_or_400(db: Session, warehouse_id: int | None, auto_commit: bool = True) -> Warehouse:
+    if warehouse_id is None:
+        return default_warehouse(db, auto_commit=auto_commit)
+    warehouse = db.get(Warehouse, warehouse_id)
+    if not warehouse:
+        raise HTTPException(status_code=400, detail="仓库不存在")
+    return warehouse
+
+
 def create_stock_in(
     payload: StockInCreate,
     db: Session,
@@ -88,9 +97,7 @@ def create_stock_in(
         if cached:
             return cached
 
-    warehouse = db.get(Warehouse, payload.warehouse_id) if payload.warehouse_id else default_warehouse(db, auto_commit=auto_commit)
-    if not warehouse:
-        warehouse = default_warehouse(db, auto_commit=auto_commit)
+    warehouse = resolve_warehouse_or_400(db, payload.warehouse_id, auto_commit=auto_commit)
     if not payload.items:
         raise HTTPException(status_code=400, detail="入库明细不能为空")
 
@@ -177,9 +184,7 @@ def create_stock_out(
         if cached:
             return cached
 
-    warehouse = db.get(Warehouse, payload.warehouse_id) if payload.warehouse_id else default_warehouse(db, auto_commit=auto_commit)
-    if not warehouse:
-        warehouse = default_warehouse(db, auto_commit=auto_commit)
+    warehouse = resolve_warehouse_or_400(db, payload.warehouse_id, auto_commit=auto_commit)
     if not payload.items:
         raise HTTPException(status_code=400, detail="出库明细不能为空")
 
@@ -300,14 +305,16 @@ def commit_stock_draft(draft_type: str, db: Session, current_user: User, project
         raise HTTPException(status_code=400, detail="暂无待入账草稿")
 
     normalized_items = []
-    for item in items_raw:
+    for index, item in enumerate(items_raw, start=1):
+        if not isinstance(item, dict):
+            raise HTTPException(status_code=400, detail=f"草稿第 {index} 条明细格式无效")
         try:
             material_id = int(item.get("material_id", 0))
             qty = Decimal(str(item.get("qty", "0")))
-        except (ArithmeticError, TypeError, ValueError):
-            continue
+        except (ArithmeticError, TypeError, ValueError) as exc:
+            raise HTTPException(status_code=400, detail=f"草稿第 {index} 条明细格式无效") from exc
         if material_id <= 0 or qty <= Decimal("0"):
-            continue
+            raise HTTPException(status_code=400, detail=f"草稿第 {index} 条明细无效")
         normalized_items.append(
             {
                 "material_id": material_id,

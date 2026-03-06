@@ -54,6 +54,14 @@ npm run lint
 npm run build
 ```
 
+Windows 本地也可以直接执行一键校验脚本：
+
+```bash
+scripts\verify.bat
+```
+
+该脚本会依次执行：后端 lint、后端测试、健康检查、前端依赖安装、前端 lint、前端 build。
+
 Windows 使用仓库内置 Node 时，请先临时加入 PATH（避免 `node not recognized`）：
 
 ```bash
@@ -98,7 +106,7 @@ tools\python312\python.exe scripts\e2e_smoke.py --username 你的管理员账号
 - `system already initialized; pass --username and --password`：数据库已初始化，需显式传管理员账号密码。
 - `SECRET_KEY` 未设置告警：开发环境可忽略；生产环境请在环境变量中设置固定强密钥。
 - `python / npm not recognized`：请优先使用仓库内置运行时（`tools\python312\python.exe`、`tools\node22\npm.cmd`）。
-- 前端构建失败：先在 `frontend/` 执行 `tools\node22\npm.cmd install` 再重试。
+- 前端构建失败：先在 `frontend/` 执行 `tools\node22\npm.cmd ci` 再重试。
 
 发版前可执行完整冒烟（全量校验 + 全量后端测试）：
 
@@ -128,6 +136,8 @@ docker compose --env-file deploy/.env -f deploy/docker-compose.yml up -d --build
 - `frontend/` 前端项目
 - `backend/` 后端项目
 - `deploy/` 部署配置
+- `scripts/` Windows 本地校验与冒烟脚本
+- `tools/` Windows 内置运行时（默认不纳入 Git）
 
 ### Backend 模块边界（当前）
 

@@ -1,4 +1,5 @@
 import { createRouter, createWebHashHistory } from 'vue-router'
+import { getSessionProjectId, getSessionToken } from './store'
 const LoginPage = () => import('./views/LoginPage.vue')
 const ProjectsPage = () => import('./views/ProjectsPage.vue')
 const MaterialsPage = () => import('./views/MaterialsPage.vue')
@@ -33,9 +34,9 @@ const router = createRouter({
   routes
 })
 
-router.beforeEach((to) => {
-  const token = sessionStorage.getItem('token')
-  const projectId = sessionStorage.getItem('projectId')
+export const resolveRouteGuard = (to) => {
+  const token = getSessionToken()
+  const projectId = getSessionProjectId()
   if (to.path !== '/login' && !token) {
     return '/login'
   }
@@ -46,6 +47,8 @@ router.beforeEach((to) => {
     return '/projects'
   }
   return true
-})
+}
+
+router.beforeEach(resolveRouteGuard)
 
 export default router

@@ -1,7 +1,8 @@
+from datetime import datetime, timezone
 from decimal import Decimal
 
 from fastapi import HTTPException
-from sqlalchemy import and_, select
+from sqlalchemy import and_, func, or_, select
 from sqlalchemy.orm import Session
 
 from ..models import Attachment, ConstructionLog, MachineLedger, Project, User
@@ -10,6 +11,10 @@ from .attachments import safe_remove_uploaded_file
 from ..utils.id_parse import parse_positive_int_ids
 from ..utils.number_format import dec_trimmed
 from ..utils.text import normalized_lower, payload_text
+
+
+def _utcnow_naive() -> datetime:
+    return datetime.now(timezone.utc).replace(tzinfo=None)
 
 
 def create_construction_log(payload: ConstructionLogCreate, db: Session, current_user: User, project: Project) -> dict:
@@ -30,11 +35,44 @@ def create_construction_log(payload: ConstructionLogCreate, db: Session, current
     return {"id": row.id}
 
 
-def list_construction_logs(db: Session, project: Project) -> list[dict]:
-    rows = db.scalars(
-        select(ConstructionLog).where(ConstructionLog.project_id == project.id).order_by(ConstructionLog.id.desc())
-    ).all()
-    return [
+def list_construction_logs(
+    db: Session,
+    project: Project,
+    keyword: str = "",
+    page: int | None = None,
+    page_size: int | None = None,
+) -> list[dict] | dict:
+    stmt = select(ConstructionLog).where(ConstructionLog.project_id == project.id).order_by(ConstructionLog.id.desc())
+    if keyword.strip():
+        kw = f"%{normalized_lower(keyword)}%"
+        stmt = stmt.where(
+            or_(
+                func.lower(ConstructionLog.log_date).like(kw),
+                func.lower(ConstructionLog.weather).like(kw),
+                func.lower(ConstructionLog.content).like(kw),
+                func.lower(ConstructionLog.title).like(kw),
+            )
+        )
+
+    if page is None and page_size is None:
+        rows = db.scalars(stmt).all()
+        return [
+            {
+                "id": row.id,
+                "log_date": row.log_date,
+                "title": row.title,
+                "weather": row.weather,
+                "content": row.content,
+                "created_at": row.created_at.isoformat(),
+            }
+            for row in rows
+        ]
+
+    page_value = max(1, int(page or 1))
+    page_size_value = max(1, min(100, int(page_size or 10)))
+    total = int(db.scalar(select(func.count()).select_from(stmt.order_by(None).subquery())) or 0)
+    rows = db.scalars(stmt.offset((page_value - 1) * page_size_value).limit(page_size_value)).all()
+    items = [
         {
             "id": row.id,
             "log_date": row.log_date,
@@ -45,6 +83,14 @@ def list_construction_logs(db: Session, project: Project) -> list[dict]:
         }
         for row in rows
     ]
+    total_pages = max(1, (total + page_size_value - 1) // page_size_value)
+    return {
+        "items": items,
+        "total": total,
+        "page": page_value,
+        "page_size": page_size_value,
+        "total_pages": total_pages,
+    }
 
 
 def update_construction_log(log_id: int, payload: ConstructionLogUpdate, db: Session, project: Project) -> dict:
@@ -76,6 +122,7 @@ def delete_construction_log(log_id: int, db: Session, project: Project) -> dict:
     attachment_paths = [item.path for item in attachments]
     for item in attachments:
         item.is_deleted = True
+        item.deleted_at = _utcnow_naive()
 
     db.delete(row)
     db.commit()
@@ -86,18 +133,31 @@ def delete_construction_log(log_id: int, db: Session, project: Project) -> dict:
     return {"ok": True}
 
 
-def machine_ledger_list(keyword: str, db: Session, project: Project) -> list[dict]:
-    rows = db.scalars(
+def machine_ledger_list(
+    keyword: str,
+    db: Session,
+    project: Project,
+    page: int | None = None,
+    page_size: int | None = None,
+) -> list[dict] | dict:
+    stmt = (
         select(MachineLedger)
         .where(MachineLedger.project_id == project.id)
         .order_by(MachineLedger.id.desc())
-    ).all()
-    kw = normalized_lower(keyword)
-    result: list[dict] = []
-    for row in rows:
-        if kw and kw not in f"{row.name} {row.spec} {row.remark}".lower():
-            continue
-        result.append(
+    )
+    if keyword.strip():
+        kw = f"%{normalized_lower(keyword)}%"
+        stmt = stmt.where(
+            or_(
+                func.lower(MachineLedger.name).like(kw),
+                func.lower(MachineLedger.spec).like(kw),
+                func.lower(MachineLedger.remark).like(kw),
+            )
+        )
+
+    if page is None and page_size is None:
+        rows = db.scalars(stmt).all()
+        return [
             {
                 "id": row.id,
                 "name": row.name,
@@ -106,8 +166,32 @@ def machine_ledger_list(keyword: str, db: Session, project: Project) -> list[dic
                 "shift_count": dec_trimmed(row.shift_count),
                 "remark": row.remark,
             }
-        )
-    return result
+            for row in rows
+        ]
+
+    page_value = max(1, int(page or 1))
+    page_size_value = max(1, min(100, int(page_size or 10)))
+    total = int(db.scalar(select(func.count()).select_from(stmt.order_by(None).subquery())) or 0)
+    rows = db.scalars(stmt.offset((page_value - 1) * page_size_value).limit(page_size_value)).all()
+    items = [
+        {
+            "id": row.id,
+            "name": row.name,
+            "spec": row.spec,
+            "use_date": row.use_date,
+            "shift_count": dec_trimmed(row.shift_count),
+            "remark": row.remark,
+        }
+        for row in rows
+    ]
+    total_pages = max(1, (total + page_size_value - 1) // page_size_value)
+    return {
+        "items": items,
+        "total": total,
+        "page": page_value,
+        "page_size": page_size_value,
+        "total_pages": total_pages,
+    }
 
 
 def machine_ledger_create(payload: dict, db: Session, project: Project) -> dict:
@@ -181,6 +265,7 @@ def machine_ledger_delete(payload: dict, db: Session, project: Project) -> dict:
         attachment_paths = [item.path for item in attachments if item.path]
         for item in attachments:
             item.is_deleted = True
+            item.deleted_at = _utcnow_naive()
 
     deleted = 0
     for row in rows:

@@ -36,6 +36,13 @@ def ensure_default_categories(db: Session, project_id: int) -> None:
 
 def list_categories(db: Session, project: Project) -> list[dict]:
     ensure_default_categories(db, project.id)
+    file_counts = dict(
+        db.execute(
+            select(ProjectFile.category_id, func.count(ProjectFile.id))
+            .where(ProjectFile.project_id == project.id, ProjectFile.is_deleted.is_(False))
+            .group_by(ProjectFile.category_id)
+        ).all()
+    )
     rows = db.scalars(
         select(FileCategory)
         .where(FileCategory.project_id == project.id)
@@ -46,6 +53,7 @@ def list_categories(db: Session, project: Project) -> list[dict]:
             "id": row.id,
             "name": row.name,
             "sort_order": row.sort_order,
+            "file_count": int(file_counts.get(row.id, 0) or 0),
             "created_at": row.created_at.isoformat() if row.created_at else "",
         }
         for row in rows
@@ -277,7 +285,14 @@ def ensure_all_projects_default_categories(db: Session) -> None:
         db.commit()
 
 
-def list_project_files(keyword: str, category_id: int | None, db: Session, project: Project) -> list[dict]:
+def list_project_files(
+    keyword: str,
+    category_id: int | None,
+    db: Session,
+    project: Project,
+    page: int | None = None,
+    page_size: int | None = None,
+) -> list[dict] | dict:
     ensure_default_categories(db, project.id)
     stmt = (
         select(ProjectFile, FileCategory)
@@ -292,13 +307,21 @@ def list_project_files(keyword: str, category_id: int | None, db: Session, proje
     if category_id is not None:
         stmt = stmt.where(ProjectFile.category_id == int(category_id))
 
-    kw = (keyword or "").strip().lower()
-    rows = db.execute(stmt).all()
-    result: list[dict] = []
-    for pf, cat in rows:
-        if kw and kw not in f"{pf.filename} {pf.remark} {cat.name}".lower():
-            continue
-        result.append(
+    if keyword.strip():
+        kw = f"%{keyword.strip().lower()}%"
+        stmt = stmt.where(
+            func.lower(
+                func.ifnull(ProjectFile.filename, "")
+                + " "
+                + func.ifnull(ProjectFile.remark, "")
+                + " "
+                + func.ifnull(FileCategory.name, "")
+            ).like(kw)
+        )
+
+    if page is None and page_size is None:
+        rows = db.execute(stmt).all()
+        return [
             {
                 "id": pf.id,
                 "category_id": cat.id,
@@ -310,8 +333,35 @@ def list_project_files(keyword: str, category_id: int | None, db: Session, proje
                 "uploaded_by": pf.uploaded_by,
                 "created_at": pf.created_at.isoformat() if pf.created_at else "",
             }
-        )
-    return result
+            for pf, cat in rows
+        ]
+
+    page_value = max(1, int(page or 1))
+    page_size_value = max(1, min(100, int(page_size or 10)))
+    total = int(db.scalar(select(func.count()).select_from(stmt.order_by(None).subquery())) or 0)
+    rows = db.execute(stmt.offset((page_value - 1) * page_size_value).limit(page_size_value)).all()
+    items = [
+        {
+            "id": pf.id,
+            "category_id": cat.id,
+            "category_name": cat.name,
+            "filename": pf.filename,
+            "content_type": pf.content_type,
+            "size": pf.size,
+            "remark": pf.remark,
+            "uploaded_by": pf.uploaded_by,
+            "created_at": pf.created_at.isoformat() if pf.created_at else "",
+        }
+        for pf, cat in rows
+    ]
+    total_pages = max(1, (total + page_size_value - 1) // page_size_value)
+    return {
+        "items": items,
+        "total": total,
+        "page": page_value,
+        "page_size": page_size_value,
+        "total_pages": total_pages,
+    }
 
 
 def get_project_file_or_404(file_id: int, db: Session, project: Project) -> ProjectFile:
@@ -335,9 +385,15 @@ def download_project_file(file_id: int, db: Session, project: Project, inline: b
 
 def delete_project_file(file_id: int, db: Session, project: Project) -> dict:
     row = get_project_file_or_404(file_id, db, project)
+    storage_key = (row.stored_name or "").strip() or (row.path or "").strip()
+    disk_path = resolve_attachment_disk_path(row)
+    should_remove_file = bool(storage_key and disk_path and disk_path.exists())
+    if should_remove_file and not safe_remove_uploaded_file(storage_key):
+        db.rollback()
+        raise HTTPException(status_code=500, detail="文件删除失败，请重试")
+
     row.is_deleted = True
     db.commit()
-    safe_remove_uploaded_file(row.path)
 
     cat = db.get(FileCategory, row.category_id)
     if cat and cat.project_id == project.id:

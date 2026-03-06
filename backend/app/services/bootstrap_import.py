@@ -1,3 +1,4 @@
+import os
 import sqlite3
 import tempfile
 import time
@@ -35,6 +36,10 @@ def safe_unlink(path: Path) -> None:
             return
 
 
+def replace_file(source: Path, target: Path) -> None:
+    os.replace(str(source), str(target))
+
+
 def validate_import_sqlite(db_file: Path) -> None:
     try:
         with sqlite3.connect(str(db_file)) as conn:
@@ -66,7 +71,7 @@ def ensure_import_permission(credentials: HTTPAuthorizationCredentials | None, a
                     raise HTTPException(status_code=401, detail="用户不存在")
                 if not is_admin_user(db, user):
                     raise HTTPException(status_code=403, detail="仅管理员可执行此操作")
-                if not verify_password((admin_password or "").strip(), user.password_hash):
+                if (admin_password or "").strip() and not verify_password((admin_password or "").strip(), user.password_hash):
                     raise HTTPException(status_code=400, detail="管理员密码错误")
     except HTTPException:
         raise
@@ -91,6 +96,8 @@ async def import_bootstrap_package_file(
     tmp_dir = Path(tempfile.gettempdir()) / "ems-import"
     tmp_dir.mkdir(parents=True, exist_ok=True)
     tmp_path = tmp_dir / f"import-{uuid4().hex}.db"
+    stage_path = tmp_dir / f"stage-{uuid4().hex}.db"
+    backup_path = tmp_dir / f"backup-{uuid4().hex}.db"
     try:
         max_bytes = 200 * 1024 * 1024
         total_size = 0
@@ -119,7 +126,7 @@ async def import_bootstrap_package_file(
         try:
             db_path.parent.mkdir(parents=True, exist_ok=True)
             with sqlite3.connect(str(tmp_path)) as src_conn:
-                with sqlite3.connect(str(db_path)) as dst_conn:
+                with sqlite3.connect(str(stage_path)) as dst_conn:
                     src_conn.backup(dst_conn)
         except sqlite3.OperationalError as exc:
             raise HTTPException(status_code=500, detail="数据库正在被占用，请关闭并发操作后重试") from exc
@@ -127,18 +134,32 @@ async def import_bootstrap_package_file(
             raise HTTPException(status_code=500, detail="导入写入失败，请稍后重试") from exc
 
         try:
-            with sqlite3.connect(str(db_path)) as conn:
+            validate_import_sqlite(stage_path)
+            with sqlite3.connect(str(stage_path)) as conn:
                 user_count = int(conn.execute("SELECT COUNT(*) FROM users").fetchone()[0] or 0)
                 if user_count <= 0:
                     raise HTTPException(status_code=400, detail="导入包无有效账号数据")
         except HTTPException:
-            if db_path.exists():
-                db_path.unlink()
             raise
         except Exception as exc:
-            safe_unlink(db_path)
             raise HTTPException(status_code=400, detail="导入后校验失败，请确认数据包正确") from exc
+
+        try:
+            if db_path.exists():
+                replace_file(db_path, backup_path)
+            replace_file(stage_path, db_path)
+        except Exception as exc:
+            if backup_path.exists() and not db_path.exists():
+                try:
+                    replace_file(backup_path, db_path)
+                except Exception:
+                    pass
+            raise HTTPException(status_code=500, detail="导入替换失败，请稍后重试") from exc
+        else:
+            safe_unlink(backup_path)
     finally:
         safe_unlink(tmp_path)
+        safe_unlink(stage_path)
+        safe_unlink(backup_path)
 
     return {"ok": True, "initialized": True}

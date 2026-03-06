@@ -118,7 +118,10 @@ def cleanup_deleted_attachments(db: Session, retention_days: int | None = None) 
     cutoff = utcnow_naive() - timedelta(days=days)
     rows = db.scalars(
         select(Attachment)
-        .where(Attachment.is_deleted.is_(True), Attachment.created_at <= cutoff)
+        .where(
+            Attachment.is_deleted.is_(True),
+            func.coalesce(Attachment.deleted_at, Attachment.created_at) <= cutoff,
+        )
         .order_by(Attachment.id.asc())
     ).all()
 

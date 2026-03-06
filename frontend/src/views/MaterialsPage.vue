@@ -113,23 +113,31 @@ import api from '../api'
 import ToolbarSearchInput from '../components/ToolbarSearchInput.vue'
 import ToolbarIconAction from '../components/ToolbarIconAction.vue'
 import StockHeadBar from '../components/StockHeadBar.vue'
-import { useLoadGuard } from '../composables/useLoadGuard'
-import { useRequestLatest } from '../composables/useRequestLatest'
+import { usePagedApiList } from '../composables/usePagedApiList'
 
 const keyword = ref('')
-const allRows = ref([])
-const page = ref(1)
-const pageSize = 10
+const selectedPageSize = 10
 const selectedIds = ref([])
-const rows = computed(() => {
-  const start = (page.value - 1) * pageSize
-  return allRows.value.slice(start, start + pageSize)
+const {
+  rows,
+  page,
+  totalPages,
+  loading: listLoading,
+  load,
+  prevPage,
+  nextPage,
+  resetPage,
+  invalidate
+} = usePagedApiList({
+  pageSize: selectedPageSize,
+  errorMessage: '加载材料失败',
+  fetchPage: ({ page, pageSize }) => api.get('/materials', { params: { keyword: keyword.value, page, page_size: pageSize } }),
+  onLoadSuccess: () => {
+    selectedIds.value = []
+  }
 })
-const totalPages = computed(() => Math.max(1, Math.ceil(allRows.value.length / pageSize)))
-const { loading: listLoading, run: runLoad } = useLoadGuard()
-const listRequest = useRequestLatest()
 
-const formatIndex = (index) => String(index + 1).padStart(2, '0')
+const formatIndex = (index) => String((page.value - 1) * selectedPageSize + index + 1).padStart(2, '0')
 const open = ref(false)
 const editingId = ref(0)
 const form = reactive({ name: '', spec: '', unit: '' })
@@ -291,37 +299,6 @@ const insertUnitTemplate = (unit) => {
   })
 }
 
-const load = async () => {
-  const token = listRequest.next()
-  await runLoad(
-    async () => {
-      const { data } = await api.get('/materials', { params: { keyword: keyword.value } })
-      if (!listRequest.isLatest(token)) return
-      allRows.value = data
-      if (page.value > totalPages.value) {
-        page.value = totalPages.value
-      }
-      selectedIds.value = []
-    },
-    (e) => {
-      if (!listRequest.isLatest(token)) return
-      ElMessage.error(e.response?.data?.detail || '加载材料失败')
-    }
-  )
-}
-
-const prevPage = () => {
-  if (page.value <= 1) return
-  page.value -= 1
-  selectedIds.value = []
-}
-
-const nextPage = () => {
-  if (page.value >= totalPages.value) return
-  page.value += 1
-  selectedIds.value = []
-}
-
 const onSelectionChange = (selection) => {
   selectedIds.value = selection.map((item) => item.id)
 }
@@ -373,8 +350,8 @@ const deleteSelected = async () => {
   }
 }
 
-const resetPage = async () => {
-  page.value = 1
+const resetMaterialsPage = async () => {
+  resetPage()
   keyword.value = ''
   open.value = false
   editingId.value = 0
@@ -383,7 +360,7 @@ const resetPage = async () => {
 }
 
 const onResetEvent = () => {
-  resetPage()
+  resetMaterialsPage()
 }
 
 const onCloseAllDialogs = () => {
@@ -402,7 +379,7 @@ onMounted(() => {
 })
 
 onBeforeUnmount(() => {
-  listRequest.invalidate()
+  invalidate()
   window.removeEventListener('close-all-dialogs', onCloseAllDialogs)
   window.removeEventListener('reset-current-page', onResetEvent)
   window.removeEventListener('resize', onWindowResize)

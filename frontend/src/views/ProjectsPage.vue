@@ -125,9 +125,11 @@ import { useAuthStore } from '../store'
 import { formatDateInput } from '../utils/date'
 import { useLoadGuard } from '../composables/useLoadGuard'
 import { useRequestLatest } from '../composables/useRequestLatest'
+import { createProjectsActions } from './projectsActions'
 
 const router = useRouter()
 const auth = useAuthStore()
+const actions = createProjectsActions({ auth, router, message: ElMessage })
 
 const open = ref(false)
 const deleteOpen = ref(false)
@@ -172,10 +174,7 @@ const loadProjects = async () => {
 }
 
 const enterProject = (project) => {
-  if (!project) return
-  auth.setProject(project)
-  ElMessage.success(`已切换到工程: ${project.name}`)
-  router.push('/construction-logs')
+  actions.enterProject(project)
 }
 
 const openDeleteSelected = () => {
@@ -241,8 +240,7 @@ const createProject = async () => {
 }
 
 const logout = () => {
-  auth.logout()
-  router.push('/login')
+  actions.logout()
 }
 
 const deleteProject = async () => {
@@ -258,10 +256,8 @@ const deleteProject = async () => {
           confirm_text: deleteForm.confirm_text
         }
       })
-      if (String(auth.projectId) === String(id)) {
-        auth.clearProject()
-      }
     }
+    actions.clearDeletedProjects(deletingIds)
     ElMessage.success('工程已删除')
     deleteOpen.value = false
     selectedProjects.value = []

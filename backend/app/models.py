@@ -36,7 +36,6 @@ class Project(Base):
     id: Mapped[int] = mapped_column(Integer, primary_key=True)
     name: Mapped[str] = mapped_column(String(200), unique=True, index=True)
     start_date: Mapped[str] = mapped_column(String(20), default="")
-    location: Mapped[str] = mapped_column(String(255), default="")
     is_active: Mapped[bool] = mapped_column(Boolean, default=True)
     created_at: Mapped[datetime] = mapped_column(DateTime, default=_utcnow_naive)
 
@@ -50,7 +49,6 @@ class Material(Base):
     name: Mapped[str] = mapped_column(String(200), index=True)
     spec: Mapped[str] = mapped_column(String(200), default="")
     unit: Mapped[str] = mapped_column(String(32), default="")
-    category: Mapped[str] = mapped_column(String(64), default="消耗品")
     is_active: Mapped[bool] = mapped_column(Boolean, default=True)
     created_at: Mapped[datetime] = mapped_column(DateTime, default=_utcnow_naive)
 
@@ -165,6 +163,7 @@ class Attachment(Base):
     uploaded_by: Mapped[str] = mapped_column(String(64), default="skins")
     is_deleted: Mapped[bool] = mapped_column(Boolean, default=False)
     created_at: Mapped[datetime] = mapped_column(DateTime, default=_utcnow_naive)
+    deleted_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
 
 
 class FileCategory(Base):

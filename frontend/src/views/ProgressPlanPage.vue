@@ -120,13 +120,17 @@
 
 <script setup>
 import { computed, onBeforeUnmount, onMounted, reactive, ref } from 'vue'
+import { storeToRefs } from 'pinia'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import { Plus } from '@element-plus/icons-vue'
 import api from '../api'
 import { formatDateInput, parseDateYmdLocal } from '../utils/date'
 import { useLoadGuard } from '../composables/useLoadGuard'
 import { useRequestLatest } from '../composables/useRequestLatest'
+import { useAuthStore } from '../store'
 
+const auth = useAuthStore()
+const { projectName } = storeToRefs(auth)
 const rows = ref([])
 const ganttCanvasRef = ref(null)
 const dayWidth = ref(32)
@@ -142,10 +146,9 @@ const dialogMode = ref('create')
 const editingRow = ref(null)
 const rowCount = ref(11)
 const dayCount = ref(37)
-const projectName = ref(localStorage.getItem('projectName') || '工程')
 const { loading: planLoading, run: runLoad } = useLoadGuard()
 const planRequest = useRequestLatest()
-const ganttTitle = computed(() => projectName.value)
+const ganttTitle = computed(() => projectName.value || '工程')
 const taskForm = reactive({
   task_name: '',
   owner: '',

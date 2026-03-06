@@ -2,7 +2,7 @@
   <div class="page-card module-page logs-manage-page">
     <StockHeadBar title="施工日志" :page="page" :total-pages="totalPages" @prev="prevPage" @next="nextPage">
       <template #actions>
-        <ToolbarSearchInput v-model="keyword" placeholder="按日期/天气/内容搜索" @input="page = 1" />
+        <ToolbarSearchInput v-model="keyword" placeholder="按日期/天气/内容搜索" @input="onKeywordInput" />
         <ToolbarIconAction tooltip="新增日志" aria-label="新增日志" type="primary" :disabled="saving || deletingSelected" @click="openCreateDialog">
           <Plus />
         </ToolbarIconAction>
@@ -227,26 +227,11 @@ import ToolbarIconAction from '../components/ToolbarIconAction.vue'
 import StockHeadBar from '../components/StockHeadBar.vue'
 import { formatDateInput } from '../utils/date'
 import { useRequestLatest } from '../composables/useRequestLatest'
-import { useLoadGuard } from '../composables/useLoadGuard'
+import { usePagedApiList } from '../composables/usePagedApiList'
 
-const allRows = ref([])
 const keyword = ref('')
-const page = ref(1)
-const pageSize = 10
+const selectedPageSize = 10
 const MAX_PHOTOS = 30
-const filteredRows = computed(() => {
-  const kw = keyword.value.trim().toLowerCase()
-  if (!kw) return allRows.value
-  return allRows.value.filter((row) => {
-    const text = `${row.log_date || ''} ${row.weather || ''} ${row.content || ''}`.toLowerCase()
-    return text.includes(kw)
-  })
-})
-const rows = computed(() => {
-  const start = (page.value - 1) * pageSize
-  return filteredRows.value.slice(start, start + pageSize)
-})
-const totalPages = computed(() => Math.max(1, Math.ceil(filteredRows.value.length / pageSize)))
 const selectedIds = ref([])
 const open = ref(false)
 const editingId = ref(null)
@@ -266,8 +251,24 @@ const contentAutosize = computed(() => (formFullscreen.value ? { minRows: 16, ma
 const viewingPhotos = ref([])
 const viewingPhotoUrls = ref([])
 const viewingRequest = useRequestLatest()
-const listRequest = useRequestLatest()
-const { loading: listLoading, run: runLoad } = useLoadGuard()
+const {
+  rows,
+  page,
+  totalPages,
+  loading: listLoading,
+  load,
+  prevPage,
+  nextPage,
+  resetPage,
+  invalidate
+} = usePagedApiList({
+  pageSize: selectedPageSize,
+  errorMessage: '加载施工日志失败',
+  fetchPage: ({ page, pageSize }) => api.get('/construction-logs', { params: { keyword: keyword.value, page, page_size: pageSize } }),
+  onLoadSuccess: () => {
+    selectedIds.value = []
+  }
+})
 const existingPhotos = ref([])
 const photoFileList = ref([])
 const albumInputRef = ref(null)
@@ -337,6 +338,8 @@ const updateRenderedViewingContent = async () => {
 const updateMobileDialog = () => {
   isMobileDialog.value = window.matchMedia('(max-width: 900px)').matches
 }
+
+let keywordInputTimer = null
 
 const loadAttachmentPreviewUrl = async (attachmentId) => {
   const { data } = await api.get(`/attachments/${attachmentId}/download`, { responseType: 'blob' })
@@ -523,37 +526,6 @@ const uploadPhotosForLog = async (logId) => {
   return uploaded
 }
 
-const load = async () => {
-  const token = listRequest.next()
-  await runLoad(
-    async () => {
-      const { data } = await api.get('/construction-logs')
-      if (!listRequest.isLatest(token)) return
-      allRows.value = data
-      if (page.value > totalPages.value) {
-        page.value = totalPages.value
-      }
-      selectedIds.value = []
-    },
-    (e) => {
-      if (!listRequest.isLatest(token)) return
-      ElMessage.error(e.response?.data?.detail || '加载施工日志失败')
-    }
-  )
-}
-
-const prevPage = () => {
-  if (page.value <= 1) return
-  page.value -= 1
-  selectedIds.value = []
-}
-
-const nextPage = () => {
-  if (page.value >= totalPages.value) return
-  page.value += 1
-  selectedIds.value = []
-}
-
 const onSelectionChange = (items) => {
   selectedIds.value = items.map((i) => i.id)
 }
@@ -563,7 +535,18 @@ const onRowClick = (row, column) => {
   viewRow(row)
 }
 
-const formatIndex = (index) => String(index + 1).padStart(2, '0')
+const formatIndex = (index) => String((page.value - 1) * selectedPageSize + index + 1).padStart(2, '0')
+
+const onKeywordInput = () => {
+  resetPage()
+  if (keywordInputTimer) {
+    window.clearTimeout(keywordInputTimer)
+  }
+  keywordInputTimer = window.setTimeout(() => {
+    load()
+    keywordInputTimer = null
+  }, 250)
+}
 
 const viewRow = async (row) => {
   const token = viewingRequest.next()
@@ -685,8 +668,8 @@ const deleteSelected = async () => {
   }
 }
 
-const resetPage = async () => {
-  page.value = 1
+const resetLogsPage = async () => {
+  resetPage()
   open.value = false
   editingId.value = null
   viewOpen.value = false
@@ -700,7 +683,7 @@ const resetPage = async () => {
 }
 
 const onResetEvent = () => {
-  resetPage()
+  resetLogsPage()
 }
 
 const onCloseAllDialogs = () => {
@@ -762,8 +745,12 @@ onMounted(() => {
 })
 
 onBeforeUnmount(() => {
-  listRequest.invalidate()
+  invalidate()
   viewingRequest.invalidate()
+  if (keywordInputTimer) {
+    window.clearTimeout(keywordInputTimer)
+    keywordInputTimer = null
+  }
   if (contentResizeTimer) {
     window.clearTimeout(contentResizeTimer)
     contentResizeTimer = null

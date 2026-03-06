@@ -269,3 +269,91 @@ def test_stock_out_blank_idempotency_key_does_not_reuse_previous_result(
     )
     assert second.status_code == 200
     assert first.json().get("order_no") != second.json().get("order_no")
+
+
+def test_stock_in_rejects_unknown_warehouse(client: TestClient, auth_token: str, make_headers):
+    project_id = client.post(
+        "/api/projects",
+        json={"name": "非法仓库工程IN", "start_date": "2026-02-26"},
+        headers=make_headers(auth_token),
+    ).json()["id"]
+
+    material_id = client.post(
+        "/api/materials",
+        json={"name": "钢筋", "spec": "HRB400", "unit": "吨"},
+        headers=make_headers(auth_token, project_id),
+    ).json()["id"]
+
+    res = client.post(
+        "/api/stock-in",
+        json={"warehouse_id": 999999, "items": [{"material_id": material_id, "qty": 1, "remark": "测试"}]},
+        headers=make_headers(auth_token, project_id),
+    )
+    assert res.status_code == 400
+    assert "仓库不存在" in res.json().get("detail", "")
+
+
+def test_stock_out_rejects_unknown_warehouse(client: TestClient, auth_token: str, make_headers):
+    project_id = client.post(
+        "/api/projects",
+        json={"name": "非法仓库工程OUT", "start_date": "2026-02-26"},
+        headers=make_headers(auth_token),
+    ).json()["id"]
+
+    material_id = client.post(
+        "/api/materials",
+        json={"name": "木方", "spec": "50x100", "unit": "根"},
+        headers=make_headers(auth_token, project_id),
+    ).json()["id"]
+
+    seed = client.post(
+        "/api/stock-in",
+        json={"items": [{"material_id": material_id, "qty": 3, "remark": "备料"}]},
+        headers=make_headers(auth_token, project_id),
+    )
+    assert seed.status_code == 200
+
+    res = client.post(
+        "/api/stock-out",
+        json={"warehouse_id": 999999, "items": [{"material_id": material_id, "qty": 1, "remark": "测试"}]},
+        headers=make_headers(auth_token, project_id),
+    )
+    assert res.status_code == 400
+    assert "仓库不存在" in res.json().get("detail", "")
+
+
+def test_stock_draft_commit_rejects_any_invalid_item(client: TestClient, auth_token: str, make_headers):
+    project_id = client.post(
+        "/api/projects",
+        json={"name": "严格草稿工程", "start_date": "2026-02-26"},
+        headers=make_headers(auth_token),
+    ).json()["id"]
+
+    material_id = client.post(
+        "/api/materials",
+        json={"name": "石材", "spec": "花岗岩", "unit": "块"},
+        headers=make_headers(auth_token, project_id),
+    ).json()["id"]
+
+    save_res = client.put(
+        "/api/stock-drafts/in",
+        json=[
+            {"material_id": material_id, "qty": 2, "remark": "有效"},
+            {"material_id": 0, "qty": 1, "remark": "无效"},
+        ],
+        headers=make_headers(auth_token, project_id),
+    )
+    assert save_res.status_code == 200
+
+    commit_res = client.post("/api/stock-drafts/in/commit", headers=make_headers(auth_token, project_id))
+    assert commit_res.status_code == 400
+    assert "草稿第 2 条明细无效" in commit_res.json().get("detail", "")
+
+    pending = client.get("/api/stock-drafts/pending/count", headers=make_headers(auth_token, project_id))
+    assert pending.status_code == 200
+    assert pending.json().get("in") == 2
+
+    inventory = client.get("/api/inventory", headers=make_headers(auth_token, project_id))
+    assert inventory.status_code == 200
+    row = next((item for item in inventory.json() if item.get("material_id") == material_id), None)
+    assert row is None

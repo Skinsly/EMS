@@ -2,6 +2,7 @@ import { computed, onBeforeUnmount, onMounted, ref } from 'vue'
 import { onBeforeRouteLeave, useRoute, useRouter } from 'vue-router'
 import { ElMessage } from 'element-plus'
 import api from '../api'
+import { getSessionValue, removeSessionValue } from '../store'
 import { formatDateInput } from '../utils/date'
 
 const QUICK_STOCK_DRAFT_KEY = 'quick-stock-draft'
@@ -308,6 +309,9 @@ export const useStockDraftPage = (mode) => {
       lastSavedDraftPayload.value = serialized
     } catch (e) {
       ElMessage.error(e.response?.data?.detail || '草稿保存失败')
+      if (force) {
+        throw e
+      }
     } finally {
       draftSaving.value = false
     }
@@ -347,7 +351,7 @@ export const useStockDraftPage = (mode) => {
   }
 
   const applyQuickDraft = () => {
-    const draftRaw = sessionStorage.getItem(QUICK_STOCK_DRAFT_KEY)
+    const draftRaw = getSessionValue(QUICK_STOCK_DRAFT_KEY)
     if (!draftRaw) return false
     try {
       const draft = JSON.parse(draftRaw)
@@ -364,7 +368,7 @@ export const useStockDraftPage = (mode) => {
       ]
       return true
     } finally {
-      sessionStorage.removeItem(QUICK_STOCK_DRAFT_KEY)
+      removeSessionValue(QUICK_STOCK_DRAFT_KEY)
     }
   }
 
@@ -406,7 +410,7 @@ export const useStockDraftPage = (mode) => {
   }
 
   const onBeforeUnload = (event) => {
-    if (!rows.value.length) return
+    if (!rows.value.length || !draftDirty.value) return
     event.preventDefault()
     event.returnValue = ''
   }
@@ -432,7 +436,12 @@ export const useStockDraftPage = (mode) => {
 
   onBeforeRouteLeave(async (_, __, next) => {
     if (draftDirty.value) {
-      await saveDraftNow(true)
+      try {
+        await saveDraftNow(true)
+      } catch {
+        next(false)
+        return
+      }
     }
     if (!rows.value.length) {
       next()

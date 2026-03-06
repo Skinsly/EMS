@@ -45,14 +45,12 @@ class StockOrderItemInput(BaseModel):
 
 class StockInCreate(BaseModel):
     warehouse_id: int | None = None
-    operator_name: str | None = None
     note: str = ""
     items: list[StockOrderItemInput]
 
 
 class StockOutCreate(BaseModel):
     warehouse_id: int | None = None
-    operator_name: str | None = None
     receiver_name: str = ""
     usage: str = ""
     work_area: str = ""

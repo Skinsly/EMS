@@ -138,14 +138,28 @@ import ToolbarIconAction from '../components/ToolbarIconAction.vue'
 import StockHeadBar from '../components/StockHeadBar.vue'
 import { formatDateInput } from '../utils/date'
 import { useRequestLatest } from '../composables/useRequestLatest'
-import { useLoadGuard } from '../composables/useLoadGuard'
+import { usePagedApiList } from '../composables/usePagedApiList'
 
 const allRows = ref([])
 const keyword = ref('')
-const page = ref(1)
-const pageSize = 10
-const rows = computed(() => allRows.value.slice((page.value - 1) * pageSize, (page.value - 1) * pageSize + pageSize))
-const totalPages = computed(() => Math.max(1, Math.ceil(allRows.value.length / pageSize)))
+const selectedPageSize = 10
+const {
+  page,
+  totalPages,
+  loading: listLoading,
+  load,
+  prevPage,
+  nextPage,
+  invalidate
+} = usePagedApiList({
+  pageSize: selectedPageSize,
+  errorMessage: '加载机械台账失败',
+  fetchPage: ({ page, pageSize }) => api.get('/machine-ledger', { params: { keyword: keyword.value, page, page_size: pageSize } }),
+  onLoadSuccess: (data) => {
+    allRows.value = Array.isArray(data?.items) ? data.items : []
+  }
+})
+const rows = computed(() => allRows.value)
 const selectedIds = ref([])
 
 const open = ref(false)
@@ -160,15 +174,13 @@ const detailRow = reactive({ name: '', spec: '', use_date: '', shift_count: '', 
 const detailPhotos = ref([])
 const detailPhotoUrls = ref([])
 const detailRequest = useRequestLatest()
-const listRequest = useRequestLatest()
-const { loading: listLoading, run: runLoad } = useLoadGuard()
 
 const photoFileList = ref([])
 const originalPhotoIds = ref([])
 const albumInputRef = ref(null)
 const photoPreviewUrls = computed(() => photoFileList.value.map((item) => item.previewUrl).filter(Boolean))
 
-const formatIndex = (index) => String(index + 1).padStart(2, '0')
+const formatIndex = (index) => String((page.value - 1) * selectedPageSize + index + 1).padStart(2, '0')
 const today = () => {
   const d = new Date()
   return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`
@@ -206,22 +218,6 @@ const clearDetailPhotos = () => {
 const loadAttachmentPreviewUrl = async (id) => {
   const { data } = await api.get(`/attachments/${id}/download`, { responseType: 'blob' })
   return URL.createObjectURL(data)
-}
-
-const load = async () => {
-  const token = listRequest.next()
-  await runLoad(
-    async () => {
-      const { data } = await api.get('/machine-ledger', { params: { keyword: keyword.value } })
-      if (!listRequest.isLatest(token)) return
-      allRows.value = data
-      if (page.value > totalPages.value) page.value = totalPages.value
-    },
-    (e) => {
-      if (!listRequest.isLatest(token)) return
-      ElMessage.error(e.response?.data?.detail || '加载机械台账失败')
-    }
-  )
 }
 
 const download = async () => {
@@ -408,16 +404,9 @@ const deleteSelected = async () => {
     deleting.value = false
   }
 }
-const prevPage = () => {
-  if (page.value > 1) page.value -= 1
-}
-const nextPage = () => {
-  if (page.value < totalPages.value) page.value += 1
-}
-
 onMounted(load)
 onBeforeUnmount(() => {
-  listRequest.invalidate()
+  invalidate()
   detailRequest.invalidate()
   clearPhotoFiles()
   clearDetailPhotos()

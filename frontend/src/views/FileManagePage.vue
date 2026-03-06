@@ -217,13 +217,13 @@ import { downloadByApi } from '../download'
 import StockHeadBar from '../components/StockHeadBar.vue'
 import ToolbarIconAction from '../components/ToolbarIconAction.vue'
 import ToolbarSearchInput from '../components/ToolbarSearchInput.vue'
+import { usePagedApiList } from '../composables/usePagedApiList'
 
 const categories = ref([])
 const categoryFilter = ref('')
 const keyword = ref('')
 const allRows = ref([])
-const page = ref(1)
-const pageSize = 10
+const selectedPageSize = 10
 const uploadOpen = ref(false)
 const uploading = ref(false)
 const uploadInputRef = ref(null)
@@ -240,19 +240,39 @@ const deleteCategoryConfirmed = ref(false)
 const deleteCategoryWarning = ref('')
 const deletingCategory = ref(false)
 const searchTimer = ref(0)
+const {
+  page,
+  totalPages,
+  load: loadFiles,
+  prevPage,
+  nextPage,
+  resetPage,
+  invalidate
+} = usePagedApiList({
+  pageSize: selectedPageSize,
+  errorMessage: '加载文件列表失败',
+  fetchPage: ({ page, pageSize }) => {
+    const params = { keyword: keyword.value, page, page_size: pageSize }
+    if (categoryFilter.value) {
+      params.category_id = categoryFilter.value
+    }
+    return api.get('/project-files', { params })
+  },
+  onLoadSuccess: (data) => {
+    allRows.value = Array.isArray(data?.items) ? data.items : []
+  }
+})
 
 const activeCategory = computed(() => categories.value.find((item) => String(item.id) === String(categoryFilter.value)) || null)
 const categoryTitleLabel = computed(() => activeCategory.value?.name || '全部分类')
-const rows = computed(() => allRows.value.slice((page.value - 1) * pageSize, (page.value - 1) * pageSize + pageSize))
-const totalPages = computed(() => Math.max(1, Math.ceil(allRows.value.length / pageSize)))
+const rows = computed(() => allRows.value)
 const pickedFileName = computed(() => pickedFile.value?.name || '')
 const deleteCategoryFileCount = computed(() => {
   if (!activeCategory.value) return 0
-  const targetName = String(activeCategory.value.name || '')
-  return allRows.value.filter((row) => String(row.category_name || '') === targetName).length
+  return Number(activeCategory.value.file_count || 0)
 })
 
-const formatIndex = (index) => String(index + 1).padStart(2, '0')
+const formatIndex = (index) => String((page.value - 1) * selectedPageSize + index + 1).padStart(2, '0')
 const formatDate = (text) => String(text || '').replace('T', ' ').slice(0, 19)
 const formatSize = (size) => {
   const n = Number(size || 0)
@@ -278,18 +298,8 @@ const loadCategories = async () => {
   }
 }
 
-const loadFiles = async () => {
-  const params = { keyword: keyword.value }
-  if (categoryFilter.value) {
-    params.category_id = categoryFilter.value
-  }
-  const { data } = await api.get('/project-files', { params })
-  allRows.value = data || []
-  if (page.value > totalPages.value) page.value = totalPages.value
-}
-
 const onFilterChange = () => {
-  page.value = 1
+  resetPage()
   loadFiles()
 }
 
@@ -298,7 +308,7 @@ const onKeywordInput = () => {
     window.clearTimeout(searchTimer.value)
   }
   searchTimer.value = window.setTimeout(() => {
-    page.value = 1
+    resetPage()
     loadFiles()
   }, 300)
 }
@@ -306,16 +316,6 @@ const onKeywordInput = () => {
 const onTitleCategoryCommand = (value) => {
   categoryFilter.value = value || ''
   onFilterChange()
-}
-
-const prevPage = () => {
-  if (page.value <= 1) return
-  page.value -= 1
-}
-
-const nextPage = () => {
-  if (page.value >= totalPages.value) return
-  page.value += 1
 }
 
 const openUploadDialog = () => {
@@ -484,6 +484,7 @@ watch(keyword, () => {
 })
 
 onBeforeUnmount(() => {
+  invalidate()
   if (searchTimer.value) {
     window.clearTimeout(searchTimer.value)
   }

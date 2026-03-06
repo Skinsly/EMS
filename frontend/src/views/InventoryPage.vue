@@ -33,7 +33,7 @@
 </template>
 
 <script setup>
-import { computed, onBeforeUnmount, onMounted, ref } from 'vue'
+import { onBeforeUnmount, onMounted, ref } from 'vue'
 import { ElMessage } from 'element-plus'
 import { Download } from '@element-plus/icons-vue'
 import api from '../api'
@@ -41,57 +41,34 @@ import { downloadByApi } from '../download'
 import ToolbarSearchInput from '../components/ToolbarSearchInput.vue'
 import ToolbarIconAction from '../components/ToolbarIconAction.vue'
 import StockHeadBar from '../components/StockHeadBar.vue'
-import { useLoadGuard } from '../composables/useLoadGuard'
-import { useRequestLatest } from '../composables/useRequestLatest'
+import { usePagedApiList } from '../composables/usePagedApiList'
 
 const keyword = ref('')
-const allRows = ref([])
-const page = ref(1)
-const pageSize = 10
-const rows = computed(() => {
-  const start = (page.value - 1) * pageSize
-  return allRows.value.slice(start, start + pageSize)
+const selectedPageSize = 10
+const {
+  rows,
+  page,
+  totalPages,
+  loading: listLoading,
+  load,
+  prevPage,
+  nextPage,
+  resetPage,
+  invalidate
+} = usePagedApiList({
+  pageSize: selectedPageSize,
+  errorMessage: '加载库存台账失败',
+  fetchPage: ({ page, pageSize }) => api.get('/inventory', { params: { keyword: keyword.value, page, page_size: pageSize } })
 })
-const totalPages = computed(() => Math.max(1, Math.ceil(allRows.value.length / pageSize)))
-const { loading: listLoading, run: runLoad } = useLoadGuard()
-const listRequest = useRequestLatest()
 
-const formatIndex = (index) => String(index + 1).padStart(2, '0')
-
-const load = async () => {
-  const token = listRequest.next()
-  await runLoad(
-    async () => {
-      const { data } = await api.get('/inventory', { params: { keyword: keyword.value } })
-      if (!listRequest.isLatest(token)) return
-      allRows.value = data
-      if (page.value > totalPages.value) {
-        page.value = totalPages.value
-      }
-    },
-    (e) => {
-      if (!listRequest.isLatest(token)) return
-      ElMessage.error(e.response?.data?.detail || '加载库存台账失败')
-    }
-  )
-}
-
-const prevPage = () => {
-  if (page.value <= 1) return
-  page.value -= 1
-}
-
-const nextPage = () => {
-  if (page.value >= totalPages.value) return
-  page.value += 1
-}
+const formatIndex = (index) => String((page.value - 1) * selectedPageSize + index + 1).padStart(2, '0')
 
 const download = async () => {
   await downloadByApi('/export/inventory', 'inventory.xls')
 }
 
-const resetPage = async () => {
-  page.value = 1
+const resetInventoryPage = async () => {
+  resetPage()
   keyword.value = ''
   await load()
 }
@@ -114,21 +91,16 @@ const formatQty = (value) => {
 }
 
 const onResetEvent = () => {
-  resetPage()
-}
-
-const onCloseAllDialogs = () => {
+  resetInventoryPage()
 }
 
 onMounted(() => {
   window.addEventListener('reset-current-page', onResetEvent)
-  window.addEventListener('close-all-dialogs', onCloseAllDialogs)
   load()
 })
 
 onBeforeUnmount(() => {
-  listRequest.invalidate()
-  window.removeEventListener('close-all-dialogs', onCloseAllDialogs)
+  invalidate()
   window.removeEventListener('reset-current-page', onResetEvent)
 })
 </script>

@@ -26,7 +26,7 @@ if not exist "%NPM_CMD%" (
 )
 
 echo.
-echo [1/5] Backend lint...
+echo [1/6] Backend lint...
 pushd "%ROOT_DIR%\backend" >nul
 "%PYTHON_EXE%" -m ruff check app tests
 if errorlevel 1 (
@@ -62,10 +62,10 @@ popd >nul
 echo [OK] Backend health smoke test passed.
 
 echo.
-echo [4/6] Frontend install (npm install)...
+echo [4/6] Frontend install (npm ci)...
 pushd "%ROOT_DIR%\frontend" >nul
 set "PATH=%NODE_DIR%;%PATH%"
-call "%NPM_CMD%" install
+call "%NPM_CMD%" ci
 if errorlevel 1 (
   echo [FAIL] Frontend install failed.
   popd >nul

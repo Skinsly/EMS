@@ -55,36 +55,43 @@
           :close-on-click-modal="false"
           :close-on-press-escape="false"
           :show-close="false"
-          class="init-dialog"
-          title="导入数据包"
+          modal-class="import-dialog-overlay"
+          class="init-dialog import-dialog"
+          align-center
         >
-          <el-upload
-            class="import-uploader"
-            :auto-upload="false"
-            :show-file-list="false"
-            :limit="1"
-            accept=".db,.sqlite,.sqlite3"
-            @change="onImportFileChange"
-          >
-            <button type="button" class="import-picker-btn" aria-label="选择数据包文件">
-              <el-icon><UploadFilled /></el-icon>
-              <span>选择数据包</span>
-            </button>
-          </el-upload>
-          <p class="import-file-name">{{ importFileName || '未选择文件' }}</p>
-          <el-form v-if="initialized" @submit.prevent>
-            <el-form-item>
-              <el-input
-                v-model="importAdminPassword"
-                show-password
-                autocomplete="current-password"
-                placeholder="请输入管理员密码"
-              />
-            </el-form-item>
-          </el-form>
+          <template #header>
+            <div class="mac-dialog-header import-dialog-header">
+              <div class="mac-dialog-controls">
+                <el-tooltip content="关闭" placement="bottom">
+                  <button class="mac-window-btn close" type="button" aria-label="关闭" @click="openImportDialog = false" />
+                </el-tooltip>
+              </div>
+              <div class="mac-dialog-title">导入数据包</div>
+            </div>
+          </template>
+
+          <p class="import-file-name">{{ importFileName || '未选择数据包' }}</p>
           <template #footer>
-            <div class="init-dialog-footer">
-              <el-button type="primary" class="login-btn init-submit-btn" :loading="importing" @click="importDataPackage">导入数据包</el-button>
+            <div class="import-dialog-footer">
+              <el-upload
+                class="import-uploader"
+                :auto-upload="false"
+                :show-file-list="false"
+                :limit="1"
+                accept=".db,.sqlite,.sqlite3"
+                @change="onImportFileChange"
+              >
+                <el-tooltip content="选择数据包" placement="top">
+                  <el-button circle class="icon-btn import-icon-btn" aria-label="选择数据包文件">
+                    <el-icon><UploadFilled /></el-icon>
+                  </el-button>
+                </el-tooltip>
+              </el-upload>
+              <el-tooltip content="导入数据包" placement="top">
+                <el-button circle class="icon-btn import-icon-btn" :loading="importing" aria-label="导入数据包" @click="importDataPackage">
+                  <el-icon><Check /></el-icon>
+                </el-button>
+              </el-tooltip>
             </div>
           </template>
         </el-dialog>
@@ -94,12 +101,13 @@
 </template>
 
 <script setup>
-import { ref, watch } from 'vue'
+import { onBeforeUnmount, ref, watch } from 'vue'
 import { useRouter } from 'vue-router'
 import { ElMessage } from 'element-plus'
-import { Setting, UploadFilled } from '@element-plus/icons-vue'
+import { Check, Setting, UploadFilled } from '@element-plus/icons-vue'
 import api from '../api'
 import { useAuthStore } from '../store'
+import { createLoginActions } from './loginActions'
 
 const router = useRouter()
 const auth = useAuthStore()
@@ -112,7 +120,6 @@ const initDialogVisible = ref(false)
 const openImportDialog = ref(false)
 const importFileName = ref('')
 const importFileRaw = ref(null)
-const importAdminPassword = ref('')
 const importing = ref(false)
 const loginError = ref('')
 let loginErrorTimer = null
@@ -128,6 +135,13 @@ const showLoginError = (message) => {
     loginErrorTimer = null
   }, 2600)
 }
+
+const actions = createLoginActions({
+  auth,
+  router,
+  message: ElMessage,
+  showLoginError
+})
 
 const submitInit = async () => {
   const initUser = initUsername.value.trim()
@@ -162,28 +176,16 @@ const submitInit = async () => {
 }
 
 const submit = async () => {
-  try {
-    if (!initialized.value) {
-      initDialogVisible.value = true
-      showLoginError('系统未初始化，请先设置账号密码')
-      return
-    }
-    const { data } = await api.post('/auth/login', {
-      username: username.value,
-      password: password.value
-    })
-    auth.setAuth(username.value, data.access_token)
-    auth.clearProject()
-    ElMessage.success('登录成功')
-    router.push('/projects')
-  } catch (e) {
-    if (e.response?.data?.detail === '系统未初始化，请先创建管理员账号') {
-      initialized.value = false
-      initDialogVisible.value = true
-      showLoginError('系统未初始化，请先设置账号密码')
-      return
-    }
-    showLoginError(e.response?.data?.detail || '登录失败')
+  const result = await actions.submit({
+    initialized,
+    username,
+    password,
+    loginApi: (payload) => api.post('/auth/login', payload)
+  })
+  if (result?.status === 'needs-init') {
+    initialized.value = false
+    initDialogVisible.value = true
+    result.onHandled?.()
   }
 }
 
@@ -197,23 +199,15 @@ const importDataPackage = async () => {
     showLoginError('请先选择数据包文件')
     return
   }
-  if (initialized.value && !importAdminPassword.value.trim()) {
-    showLoginError('请输入管理员密码')
-    return
-  }
   importing.value = true
   try {
     const formData = new FormData()
     formData.append('file', importFileRaw.value)
-    if (initialized.value) {
-      formData.append('admin_password', importAdminPassword.value.trim())
-    }
     await api.post('/bootstrap/import-package', formData)
     ElMessage.success('数据包导入成功，请登录')
     openImportDialog.value = false
     importFileName.value = ''
     importFileRaw.value = null
-    importAdminPassword.value = ''
     await loadBootstrapStatus()
   } catch (e) {
     const detail = e.response?.data?.detail
@@ -236,7 +230,15 @@ const loadBootstrapStatus = async () => {
 
 watch(openImportDialog, (visible) => {
   if (!visible) {
-    importAdminPassword.value = ''
+    importFileName.value = ''
+    importFileRaw.value = null
+  }
+})
+
+onBeforeUnmount(() => {
+  if (loginErrorTimer) {
+    clearTimeout(loginErrorTimer)
+    loginErrorTimer = null
   }
 })
 
@@ -261,46 +263,20 @@ loadBootstrapStatus()
 }
 
 .import-file-name {
-  margin: 12px 0 0;
+  margin: 4px 0 0;
+  min-height: 38px;
   font-size: 13px;
   color: var(--muted);
   word-break: break-all;
   text-align: center;
+  display: flex;
+  align-items: center;
+  justify-content: center;
 }
 
 .import-uploader {
   display: flex;
-  justify-content: center;
-}
-
-.import-picker-btn {
-  min-width: 178px;
-  height: 40px;
-  border: 1px solid color-mix(in oklab, var(--accent) 34%, var(--divider-strong) 66%);
-  border-radius: 10px;
-  background: linear-gradient(145deg, color-mix(in oklab, var(--surface-1) 78%, #ffffff 22%), color-mix(in oklab, var(--accent) 10%, var(--surface-2) 90%));
-  color: var(--text);
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  gap: 8px;
-  font-size: 14px;
-  font-weight: 600;
-  cursor: pointer;
-  transition: background-color var(--motion-fast) var(--motion-ease), border-color var(--motion-fast) var(--motion-ease), transform var(--motion-fast) var(--motion-ease);
-}
-
-.import-picker-btn:hover {
-  border-color: color-mix(in oklab, var(--accent) 48%, var(--divider-strong) 52%);
-  background: linear-gradient(145deg, color-mix(in oklab, var(--surface-1) 64%, #ffffff 36%), color-mix(in oklab, var(--accent) 16%, var(--surface-2) 84%));
-}
-
-.import-picker-btn:active {
-  transform: translateY(1px);
-}
-
-.import-picker-btn .el-icon {
-  font-size: 16px;
+  justify-content: flex-start;
 }
 
 .login-error-float {
@@ -329,12 +305,44 @@ loadBootstrapStatus()
   justify-content: center;
 }
 
+.import-dialog-header {
+  display: flex;
+  justify-content: center;
+  align-items: center;
+}
+
+.import-dialog-footer {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  width: 100%;
+}
+
+.import-icon-btn {
+  margin: 0 !important;
+}
+
 .init-submit-btn {
   min-width: 132px;
 }
 
 :deep(.init-dialog .el-dialog__header) {
   text-align: center;
+}
+
+:deep(.init-dialog .el-dialog) {
+  overflow: visible;
+}
+
+:deep(.init-dialog .el-dialog__body) {
+  max-height: none !important;
+  overflow: visible !important;
+  padding-bottom: 8px;
+}
+
+:deep(.import-dialog) {
+  width: min(420px, calc(100vw - 32px)) !important;
 }
 
 :deep(.init-dialog .el-dialog__title) {
@@ -345,5 +353,13 @@ loadBootstrapStatus()
 :deep(.init-dialog .el-dialog__footer) {
   display: flex;
   justify-content: center;
+}
+
+:deep(.import-dialog .el-dialog__header) {
+  padding-bottom: 8px;
+}
+
+:deep(.import-dialog .el-dialog__footer) {
+  display: block;
 }
 </style>

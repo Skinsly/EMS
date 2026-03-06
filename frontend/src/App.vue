@@ -5,7 +5,6 @@
         :width="isMobileLayout ? '150px' : (isSidebarCollapsed ? '56px' : '184px')"
         class="app-aside"
         :class="{ 'mobile-mode': isMobileLayout, 'mobile-open': mobileMenuOpen }"
-        @click="onAsideBlankClick"
       >
           <div class="aside-brand" :class="{ collapsed: isSidebarCollapsed }">
             {{ isSidebarCollapsed ? 'EMS' : '工程管理系统' }}
@@ -155,8 +154,8 @@ const theme = ref('light')
 const isSidebarCollapsed = ref(false)
 const isMobileLayout = ref(false)
 const mobileMenuOpen = ref(false)
-const draftPendingTotal = ref(0)
-const defaultMenuItems = [
+const lastDraftPendingToastTotal = ref(-1)
+const menuItems = [
   { index: '/construction-logs', label: '施工日志', icon: Document },
   { index: '/file-manage', label: '文件管理', icon: FolderOpened },
   { index: '/machine-ledger', label: '机械台账', icon: Van },
@@ -167,7 +166,6 @@ const defaultMenuItems = [
   { index: '/inventory', label: '库存台账', icon: CollectionTag },
   { index: '/progress-plan', label: '进度计划', icon: Calendar }
 ]
-const menuItems = ref([...defaultMenuItems])
 const isMenuCollapsed = computed(() => !isMobileLayout.value && isSidebarCollapsed.value)
 
 const showMainLayout = computed(() => route.path !== '/login' && route.path !== '/projects')
@@ -201,8 +199,6 @@ const goProjectEntry = () => {
   router.push('/projects')
 }
 
-const onAsideBlankClick = () => {}
-
 const onCloseAllDialogs = () => {
   openSettings.value = false
 }
@@ -211,10 +207,11 @@ const loadDraftPending = async () => {
   if (!showMainLayout.value) return
   try {
     const { data } = await api.get('/stock-drafts/pending/count')
-    draftPendingTotal.value = Number(data?.total || 0)
-    if (draftPendingTotal.value > 0) {
-      ElMessage.warning(`你有 ${draftPendingTotal.value} 条待入账草稿`)
+    const total = Number(data?.total || 0)
+    if (total > 0 && total !== lastDraftPendingToastTotal.value) {
+      ElMessage.warning(`你有 ${total} 条待入账草稿`)
     }
+    lastDraftPendingToastTotal.value = total
   } catch {
     // ignore draft reminder failures
   }
