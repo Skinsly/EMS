@@ -129,7 +129,7 @@
 
 <script setup>
 import { computed, onBeforeUnmount, onMounted, reactive, ref } from 'vue'
-import { ElMessage, ElMessageBox } from 'element-plus'
+import { ElMessageBox } from 'element-plus'
 import { Check, Delete, Download, Edit, Plus } from '@element-plus/icons-vue'
 import api from '../api'
 import { downloadByApi } from '../download'
@@ -137,8 +137,10 @@ import ToolbarSearchInput from '../components/ToolbarSearchInput.vue'
 import ToolbarIconAction from '../components/ToolbarIconAction.vue'
 import StockHeadBar from '../components/StockHeadBar.vue'
 import { formatDateInput } from '../utils/date'
+import { useMachineLedgerPhotos } from '../composables/useMachineLedgerPhotos'
 import { useRequestLatest } from '../composables/useRequestLatest'
 import { usePagedApiList } from '../composables/usePagedApiList'
+import { notify } from '../utils/notify'
 
 const allRows = ref([])
 const keyword = ref('')
@@ -171,14 +173,23 @@ const form = reactive({ name: '', spec: '', use_date: '', shift_count: '', remar
 const detailOpen = ref(false)
 const detailId = ref(0)
 const detailRow = reactive({ name: '', spec: '', use_date: '', shift_count: '', remark: '' })
-const detailPhotos = ref([])
-const detailPhotoUrls = ref([])
 const detailRequest = useRequestLatest()
-
-const photoFileList = ref([])
-const originalPhotoIds = ref([])
-const albumInputRef = ref(null)
-const photoPreviewUrls = computed(() => photoFileList.value.map((item) => item.previewUrl).filter(Boolean))
+const {
+  albumInputRef,
+  photoFileList,
+  photoPreviewUrls,
+  detailPhotos,
+  detailPhotoUrls,
+  clearPhotoFiles,
+  clearDetailPhotos,
+  openPhotoPicker,
+  onNativePhotoChange,
+  removePhoto,
+  uploadNewPhotos,
+  loadEditPhotos,
+  removeDroppedExistingPhotos,
+  loadDetailPhotoSet
+} = useMachineLedgerPhotos({ api })
 
 const formatIndex = (index) => String((page.value - 1) * selectedPageSize + index + 1).padStart(2, '0')
 const today = () => {
@@ -202,24 +213,6 @@ const shiftCountInput = computed({
   }
 })
 
-const revokeObjectUrl = (url) => {
-  if (url?.startsWith('blob:')) URL.revokeObjectURL(url)
-}
-const clearPhotoFiles = () => {
-  photoFileList.value.forEach((i) => revokeObjectUrl(i.previewUrl))
-  photoFileList.value = []
-  originalPhotoIds.value = []
-}
-const clearDetailPhotos = () => {
-  detailPhotos.value.forEach((i) => revokeObjectUrl(i.previewUrl))
-  detailPhotos.value = []
-  detailPhotoUrls.value = []
-}
-const loadAttachmentPreviewUrl = async (id) => {
-  const { data } = await api.get(`/attachments/${id}/download`, { responseType: 'blob' })
-  return URL.createObjectURL(data)
-}
-
 const download = async () => {
   await downloadByApi('/export/machine-ledger', 'machine-ledger.xls', { keyword: keyword.value })
 }
@@ -240,51 +233,9 @@ const closeCreateDialog = () => {
   clearPhotoFiles()
 }
 
-const openPhotoPicker = () => {
-  albumInputRef.value?.click()
-}
-const onNativePhotoChange = (event) => {
-  const files = Array.from(event.target.files || [])
-  const remain = Math.max(0, 12 - photoFileList.value.length)
-  const picked = files.slice(0, remain).map((file, idx) => ({
-    uid: `native-${Date.now()}-${idx}`,
-    name: file.name,
-    status: 'ready',
-    raw: file,
-    previewUrl: URL.createObjectURL(file)
-  }))
-  photoFileList.value = [...photoFileList.value, ...picked]
-  event.target.value = ''
-}
-const removePhoto = (uid) => {
-  const target = photoFileList.value.find((i) => i.uid === uid)
-  if (target) revokeObjectUrl(target.previewUrl)
-  photoFileList.value = photoFileList.value.filter((i) => i.uid !== uid)
-}
-
-const sleep = (ms) => new Promise((resolve) => window.setTimeout(resolve, ms))
-
-const uploadPhotoWithRetry = async (rowId, rawFile, maxAttempts = 2) => {
-  let lastError = null
-  for (let attempt = 1; attempt <= maxAttempts; attempt += 1) {
-    try {
-      const fd = new FormData()
-      fd.append('file', rawFile)
-      await api.post(`/attachments/upload?order_type=machine_ledger&order_id=${rowId}`, fd)
-      return
-    } catch (err) {
-      lastError = err
-      if (attempt < maxAttempts) {
-        await sleep(250)
-      }
-    }
-  }
-  throw lastError
-}
-
 const save = async () => {
   if (saving.value) return
-  if (!form.name.trim()) return ElMessage.error('请输入机械名称')
+  if (!form.name.trim()) return notify.error('请输入机械名称')
   saving.value = true
   try {
     const payload = {
@@ -302,28 +253,15 @@ const save = async () => {
       const { data } = await api.post('/machine-ledger', payload)
       rowId = Number(data?.id || 0)
     }
-    for (const item of photoFileList.value) {
-      if (!item.raw) continue
-      await uploadPhotoWithRetry(rowId, item.raw, 2)
-    }
+    await uploadNewPhotos(rowId)
     if (editingId.value) {
-      const keepExistingIds = new Set(
-        photoFileList.value
-          .filter((item) => String(item.uid || '').startsWith('existing-'))
-          .map((item) => Number(item.id))
-          .filter((id) => Number.isFinite(id) && id > 0)
-      )
-      for (const id of originalPhotoIds.value) {
-        if (!keepExistingIds.has(id)) {
-          await api.delete(`/attachments/${id}`)
-        }
-      }
+      await removeDroppedExistingPhotos()
     }
-    ElMessage.success(editingId.value ? '更新成功' : '新增成功')
+    notify.success(editingId.value ? '更新成功' : '新增成功')
     closeCreateDialog()
     await load()
   } catch (e) {
-    ElMessage.error(e.response?.data?.detail || '保存失败')
+    notify.error(e.response?.data?.detail || '保存失败')
   } finally {
     saving.value = false
   }
@@ -338,12 +276,8 @@ const editRow = async (row) => {
   form.remark = row.remark || ''
   clearPhotoFiles()
   try {
-    const { data } = await api.get(`/attachments?order_type=machine_ledger&order_id=${editingId.value}`)
-    originalPhotoIds.value = (data || []).map((a) => Number(a.id)).filter((id) => Number.isFinite(id) && id > 0)
-    const files = await Promise.all((data || []).map(async (a, idx) => ({ uid: `existing-${idx}-${a.id}`, id: Number(a.id), name: a.filename, status: 'success', previewUrl: await loadAttachmentPreviewUrl(a.id) })))
-    photoFileList.value = files
+    await loadEditPhotos(editingId.value)
   } catch {
-    originalPhotoIds.value = []
     photoFileList.value = []
   }
   open.value = true
@@ -360,17 +294,8 @@ const openDetailByRow = (row) => {
   loadDetailPhotos(token)
 }
 const loadDetailPhotos = async (token) => {
-  clearDetailPhotos()
   try {
-    const { data } = await api.get(`/attachments?order_type=machine_ledger&order_id=${detailId.value}`)
-    if (!detailRequest.isLatest(token)) return
-    const photos = await Promise.all((data || []).map(async (a) => ({ ...a, previewUrl: await loadAttachmentPreviewUrl(a.id) })))
-    if (!detailRequest.isLatest(token)) {
-      photos.forEach((item) => revokeObjectUrl(item.previewUrl))
-      return
-    }
-    detailPhotos.value = photos
-    detailPhotoUrls.value = photos.map((p) => p.previewUrl)
+    await loadDetailPhotoSet(detailId.value, detailRequest, token)
   } catch {
     if (!detailRequest.isLatest(token)) return
     detailPhotos.value = []
@@ -394,12 +319,12 @@ const deleteSelected = async () => {
   try {
     await ElMessageBox.confirm(`确定删除选中的 ${selectedIds.value.length} 条机械台账吗？`, '删除确认', { type: 'warning' })
     await api.post('/machine-ledger/delete', { ids: selectedIds.value })
-    ElMessage.success('删除成功')
+    notify.success('删除成功')
     selectedIds.value = []
     await load()
   } catch (e) {
     if (e === 'cancel' || e === 'close') return
-    ElMessage.error(e.response?.data?.detail || '删除失败')
+    notify.error(e.response?.data?.detail || '删除失败')
   } finally {
     deleting.value = false
   }

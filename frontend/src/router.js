@@ -13,20 +13,20 @@ const SitePhotosPage = () => import('./views/SitePhotosPage.vue')
 const FileManagePage = () => import('./views/FileManagePage.vue')
 
 const routes = [
-  { path: '/login', component: LoginPage },
+  { path: '/login', component: LoginPage, meta: { public: true, redirectIfAuthed: '/projects' } },
   { path: '/', redirect: '/projects' },
-  { path: '/projects', component: ProjectsPage },
-  { path: '/materials', component: MaterialsPage },
-  { path: '/construction-logs', component: ConstructionLogsPage },
-  { path: '/progress-plan', component: ProgressPlanPage },
-  { path: '/stock-manage', component: StockManagePage },
-  { path: '/stock-records', component: StockRecordsPage },
+  { path: '/projects', component: ProjectsPage, meta: { requiresAuth: true } },
+  { path: '/materials', component: MaterialsPage, meta: { requiresAuth: true, requiresProject: true } },
+  { path: '/construction-logs', component: ConstructionLogsPage, meta: { requiresAuth: true, requiresProject: true } },
+  { path: '/progress-plan', component: ProgressPlanPage, meta: { requiresAuth: true, requiresProject: true } },
+  { path: '/stock-manage', component: StockManagePage, meta: { requiresAuth: true, requiresProject: true } },
+  { path: '/stock-records', component: StockRecordsPage, meta: { requiresAuth: true, requiresProject: true } },
   { path: '/stock-in', redirect: '/stock-manage?mode=in' },
   { path: '/stock-out', redirect: '/stock-manage?mode=out' },
-  { path: '/inventory', component: InventoryPage },
-  { path: '/machine-ledger', component: MachineLedgerPage },
-  { path: '/site-photos', component: SitePhotosPage },
-  { path: '/file-manage', component: FileManagePage }
+  { path: '/inventory', component: InventoryPage, meta: { requiresAuth: true, requiresProject: true } },
+  { path: '/machine-ledger', component: MachineLedgerPage, meta: { requiresAuth: true, requiresProject: true } },
+  { path: '/site-photos', component: SitePhotosPage, meta: { requiresAuth: true, requiresProject: true } },
+  { path: '/file-manage', component: FileManagePage, meta: { requiresAuth: true, requiresProject: true } }
 ]
 
 const router = createRouter({
@@ -37,13 +37,13 @@ const router = createRouter({
 export const resolveRouteGuard = (to) => {
   const token = getSessionToken()
   const projectId = getSessionProjectId()
-  if (to.path !== '/login' && !token) {
+  if (to.meta?.redirectIfAuthed && token) {
+    return to.meta.redirectIfAuthed
+  }
+  if (to.meta?.requiresAuth && !token) {
     return '/login'
   }
-  if (to.path === '/login' && token) {
-    return '/projects'
-  }
-  if (token && to.path !== '/projects' && !projectId) {
+  if (token && to.meta?.requiresProject && !projectId) {
     return '/projects'
   }
   return true

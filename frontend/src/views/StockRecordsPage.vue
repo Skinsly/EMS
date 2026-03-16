@@ -101,7 +101,6 @@
 
 <script setup>
 import { computed, onBeforeUnmount, onMounted, reactive, ref } from 'vue'
-import { ElMessage } from 'element-plus'
 import { Check, Download, Edit } from '@element-plus/icons-vue'
 import api from '../api'
 import { downloadByApi } from '../download'
@@ -110,6 +109,7 @@ import ToolbarIconAction from '../components/ToolbarIconAction.vue'
 import StockHeadBar from '../components/StockHeadBar.vue'
 import { useLoadGuard } from '../composables/useLoadGuard'
 import { useRequestLatest } from '../composables/useRequestLatest'
+import { notify } from '../utils/notify'
 
 const rows = ref([])
 const total = ref(0)
@@ -172,7 +172,7 @@ const load = async () => {
     },
     (e) => {
       if (!listRequest.isLatest(token)) return
-      ElMessage.error(e.response?.data?.detail || '加载记录失败')
+      notify.error(e.response?.data?.detail || '加载记录失败')
     }
   )
 }
@@ -229,7 +229,7 @@ const openCorrectDialog = (row) => {
 const submitCorrect = async () => {
   if (correctSubmitting.value) return
   if (!correctReason.value.trim()) {
-    ElMessage.error('请填写更正原因')
+    notify.error('请填写更正原因')
     return
   }
   correctSubmitting.value = true
@@ -239,13 +239,13 @@ const submitCorrect = async () => {
       order_no: correctTarget.order_no,
       reason: correctReason.value
     })
-    ElMessage.success('更正成功，已生成冲正单')
+    notify.success('更正成功，已生成冲正单')
     correctOpen.value = false
     detailOpen.value = false
     selectedRows.value = []
     await load()
   } catch (e) {
-    ElMessage.error(e.response?.data?.detail || '更正失败')
+    notify.error(e.response?.data?.detail || '更正失败')
   } finally {
     correctSubmitting.value = false
   }
@@ -254,7 +254,7 @@ const submitCorrect = async () => {
 const correctSelected = () => {
   if (!selectedRows.value.length) return
   if (selectedRows.value.length > 1) {
-    ElMessage.error('一次只能更正一条记录')
+    notify.error('一次只能更正一条记录')
     return
   }
   openCorrectDialog(selectedRows.value[0])

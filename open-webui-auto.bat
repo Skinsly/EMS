@@ -13,11 +13,15 @@ set "PY_EXE=%ROOT%\tools\python312\python.exe"
 if not exist "%PY_EXE%" set "PY_EXE=D:\tools\python312\python.exe"
 
 set "NODE_HOME=%ROOT%\tools\node22"
-if not exist "%NODE_HOME%\node.exe" set "NODE_HOME=D:\tools\node-v22.22.0-win-x64"
+if not exist "%NODE_HOME%\node.exe" (
+  if exist "%NODE_HOME%\node-v22.13.1-win-x64\node.exe" set "NODE_HOME=%NODE_HOME%\node-v22.13.1-win-x64"
+)
+if not exist "%NODE_HOME%\node.exe" if exist "D:\tools\node-v22.22.0-win-x64\node.exe" set "NODE_HOME=D:\tools\node-v22.22.0-win-x64"
 set "NODE_EXE=%NODE_HOME%\node.exe"
 set "NPM_CLI=%NODE_HOME%\node_modules\npm\bin\npm-cli.js"
 set "NPM_CMD=%NODE_HOME%\npm.cmd"
 set "VITE_CLI=%ROOT%\frontend\node_modules\vite\bin\vite.js"
+set "FRONTEND_PATH=%NODE_HOME%;%ROOT%\frontend\node_modules\.bin;%PATH%"
 
 if not exist "%PY_EXE%" (
   where py >nul 2>nul
@@ -51,6 +55,33 @@ if "%USE_NODE_CLI%"=="0" (
   )
 )
 
+if not exist "%ROOT%\frontend\node_modules\vite\bin\vite.js" (
+  echo Frontend dependencies not ready. Installing...
+  if "%USE_NODE_CLI%"=="1" (
+    cmd /d /s /c "set PATH=%FRONTEND_PATH% && cd /d "%ROOT%\frontend" && "%NODE_EXE%" "%NPM_CLI%" install"
+  ) else (
+    cmd /d /s /c "set PATH=%FRONTEND_PATH% && cd /d "%ROOT%\frontend" && %NPM_CMD% install"
+  )
+  if errorlevel 1 (
+    echo [ERROR] Frontend dependency install failed.
+    echo Try manually in a normal terminal:
+    echo   cd /d "%ROOT%\frontend"
+    if "%USE_NODE_CLI%"=="1" (
+      echo   "%NODE_EXE%" "%NPM_CLI%" install
+    ) else (
+      echo   %NPM_CMD% install
+    )
+    pause
+    exit /b 1
+  )
+)
+
+if not exist "%ROOT%\frontend\node_modules\vite\bin\vite.js" (
+  echo [ERROR] vite is still missing after install. Frontend cannot start.
+  pause
+  exit /b 1
+)
+
 for /f "usebackq delims=" %%I in (`powershell -NoProfile -Command "$ip=[System.Net.Dns]::GetHostAddresses([System.Net.Dns]::GetHostName()) ^| Where-Object { $_.AddressFamily -eq 'InterNetwork' -and -not $_.IPAddressToString.StartsWith('127.') } ^| Select-Object -First 1 -ExpandProperty IPAddressToString; if(-not $ip){$ip='127.0.0.1'}; Write-Output $ip"`) do set "LAN_IP=%%I"
 
 set "LOCAL_URL=http://localhost:%FRONTEND_PORT%/#/login"
@@ -65,12 +96,12 @@ start "EMS Backend" cmd /k "cd /d ""%ROOT%\backend"" && %PY_EXE% -m uvicorn app.
 
 if "%USE_NODE_CLI%"=="1" (
   if exist "%VITE_CLI%" (
-    start "EMS Frontend" cmd /k "cd /d ""%ROOT%\frontend"" && ""%NODE_EXE%"" ""%VITE_CLI%"" --host %FRONTEND_HOST% --port %FRONTEND_PORT% --strictPort"
+    start "EMS Frontend" cmd /k "set PATH=%FRONTEND_PATH% && cd /d ""%ROOT%\frontend"" && ""%NODE_EXE%"" ""%VITE_CLI%"" --host %FRONTEND_HOST% --port %FRONTEND_PORT% --strictPort"
   ) else (
-    start "EMS Frontend" cmd /k "cd /d ""%ROOT%\frontend"" && ""%NODE_EXE%"" ""%NPM_CLI%"" run dev -- --host %FRONTEND_HOST% --port %FRONTEND_PORT% --strictPort"
+    start "EMS Frontend" cmd /k "set PATH=%FRONTEND_PATH% && cd /d ""%ROOT%\frontend"" && ""%NODE_EXE%"" ""%NPM_CLI%"" run dev -- --host %FRONTEND_HOST% --port %FRONTEND_PORT% --strictPort"
   )
 ) else (
-  start "EMS Frontend" cmd /k "cd /d ""%ROOT%\frontend"" && %NPM_CMD% run dev -- --host %FRONTEND_HOST% --port %FRONTEND_PORT% --strictPort"
+  start "EMS Frontend" cmd /k "set PATH=%FRONTEND_PATH% && cd /d ""%ROOT%\frontend"" && %NPM_CMD% run dev -- --host %FRONTEND_HOST% --port %FRONTEND_PORT% --strictPort"
 )
 
 echo Waiting for frontend to boot...

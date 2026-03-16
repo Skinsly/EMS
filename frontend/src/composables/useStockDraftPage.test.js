@@ -4,7 +4,7 @@ import { useStockDraftPage } from './useStockDraftPage'
 
 const routerReplace = vi.fn()
 let routeLeaveGuard = null
-const messageApi = vi.hoisted(() => ({
+const notifyApi = vi.hoisted(() => ({
   success: vi.fn(),
   error: vi.fn(),
   warning: vi.fn()
@@ -31,8 +31,8 @@ vi.mock('../api', () => ({
   }
 }))
 
-vi.mock('element-plus', () => ({
-  ElMessage: messageApi
+vi.mock('../utils/notify', () => ({
+  notify: notifyApi
 }))
 
 const flushPromises = async (times = 3) => {
@@ -70,9 +70,9 @@ describe('useStockDraftPage', () => {
     apiMocks.get.mockReset()
     apiMocks.put.mockReset()
     apiMocks.post.mockReset()
-    messageApi.success.mockReset()
-    messageApi.error.mockReset()
-    messageApi.warning.mockReset()
+    notifyApi.success.mockReset()
+    notifyApi.error.mockReset()
+    notifyApi.warning.mockReset()
     sessionStorage.clear()
     vi.stubGlobal('confirm', vi.fn(() => true))
   })
@@ -102,7 +102,7 @@ describe('useStockDraftPage', () => {
       { date: '2026-03-01', material_id: 1, qty: 2, remark: '待入账' }
     ])
     expect(apiMocks.post).not.toHaveBeenCalled()
-    expect(messageApi.error).toHaveBeenCalled()
+    expect(notifyApi.error).toHaveBeenCalled()
     expect(exposed.commitLoading.value).toBe(false)
 
     app.unmount()

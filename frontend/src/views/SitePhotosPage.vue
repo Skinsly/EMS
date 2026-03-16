@@ -59,13 +59,15 @@
 
 <script setup>
 import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue'
-import { ElMessage, ElMessageBox } from 'element-plus'
+import { ElMessageBox } from 'element-plus'
 import api from '../api'
 import ToolbarSearchInput from '../components/ToolbarSearchInput.vue'
 import StockHeadBar from '../components/StockHeadBar.vue'
 import { formatDateInput } from '../utils/date'
 import { useRequestLatest } from '../composables/useRequestLatest'
 import { useLoadGuard } from '../composables/useLoadGuard'
+import { notify } from '../utils/notify'
+import { readPreference, storageKeys } from '../utils/storage'
 
 const allRows = ref([])
 const visibleRows = ref([])
@@ -73,7 +75,7 @@ const page = ref(1)
 const photoCols = ref(5)
 const isMobileLayout = ref(window.matchMedia('(max-width: 900px)').matches)
 const pageCardRef = ref(null)
-const isSidebarCollapsed = ref(localStorage.getItem('sidebarCollapsed') === '1')
+const isSidebarCollapsed = ref(readPreference(storageKeys.preferences.sidebarCollapsed) === '1')
 const pcExpandedThreeRowHeight = ref(0)
 const gridAnimating = ref(false)
 const { loading: listLoading, run: runLoad } = useLoadGuard()
@@ -181,7 +183,7 @@ const forceDownloadAttachment = async (attachmentId) => {
     anchor.remove()
     URL.revokeObjectURL(url)
   } catch (e) {
-    ElMessage.error(e.response?.data?.detail || '下载失败')
+    notify.error(e.response?.data?.detail || '下载失败')
   }
 }
 
@@ -334,7 +336,7 @@ const loadVisiblePreviews = async () => {
     if (!previewRequest.isLatest(token)) return
     clearPreviewUrls()
     visibleRows.value = baseRows
-    ElMessage.error(e.response?.data?.detail || '加载照片预览失败')
+    notify.error(e.response?.data?.detail || '加载照片预览失败')
   }
 }
 
@@ -360,7 +362,7 @@ const load = async () => {
     },
     (e) => {
       if (!loadRequest.isLatest(token)) return
-      ElMessage.error(e.response?.data?.detail || '加载现场照片失败')
+      notify.error(e.response?.data?.detail || '加载现场照片失败')
     }
   )
 }
@@ -383,11 +385,11 @@ const remove = async (photo) => {
       cancelButtonText: '取消'
     })
     await api.delete(`/attachments/${photo.id}`)
-    ElMessage.success('删除成功')
+    notify.success('删除成功')
     await load()
   } catch (e) {
     if (e !== 'cancel' && e !== 'close') {
-      ElMessage.error(e.response?.data?.detail || '删除失败')
+      notify.error(e.response?.data?.detail || '删除失败')
     }
   }
 }

@@ -121,13 +121,15 @@
 <script setup>
 import { computed, onBeforeUnmount, onMounted, reactive, ref } from 'vue'
 import { storeToRefs } from 'pinia'
-import { ElMessage, ElMessageBox } from 'element-plus'
+import { ElMessageBox } from 'element-plus'
 import { Plus } from '@element-plus/icons-vue'
 import api from '../api'
 import { formatDateInput, parseDateYmdLocal } from '../utils/date'
 import { useLoadGuard } from '../composables/useLoadGuard'
+import { useProgressPlanPersistence } from '../composables/useProgressPlanPersistence'
 import { useRequestLatest } from '../composables/useRequestLatest'
 import { useAuthStore } from '../store'
+import { notify } from '../utils/notify'
 
 const auth = useAuthStore()
 const { projectName } = storeToRefs(auth)
@@ -159,6 +161,13 @@ const taskForm = reactive({
   predecessor: '',
   note: ''
 })
+const {
+  createTask,
+  updateTask,
+  removeTask,
+  persistRow,
+  persistSortOrders
+} = useProgressPlanPersistence({ api, notify, rows, selectedRow })
 
 const taskStartDateInput = computed({
   get: () => taskForm.start_date,
@@ -243,27 +252,12 @@ const saveTaskDialog = async () => {
       const insertAt = pendingInsertIndex.value == null
         ? rows.value.length
         : clamp(pendingInsertIndex.value, 0, rows.value.length)
-      const payload = {
-        task_name: newRow.task_name,
-        owner: newRow.owner,
-        start_date: newRow.start_date,
-        end_date: newRow.end_date,
-        progress: newRow.progress,
-        status: newRow.status,
-        predecessor: newRow.predecessor,
-        note: newRow.note,
-        sort_order: insertAt + 1
-      }
-      const { data } = await api.post('/progress-plans', payload)
-      newRow.id = data.id
-      rows.value.splice(insertAt, 0, newRow)
+      await createTask(newRow, insertAt)
       pendingInsertIndex.value = null
-      selectedRow.value = newRow
       taskDialogOpen.value = false
-      ElMessage.success('任务已保存')
       return
     } catch (e) {
-      ElMessage.error(e.response?.data?.detail || '保存失败')
+      notify.error(e.response?.data?.detail || '保存失败')
       return
     }
   }
@@ -273,23 +267,10 @@ const saveTaskDialog = async () => {
   try {
     const row = editingRow.value
     if (!row.id) return
-    const payload = {
-      task_name: row.task_name,
-      owner: row.owner,
-      start_date: row.start_date,
-      end_date: row.end_date,
-      progress: row.progress,
-      status: row.status,
-      predecessor: row.predecessor,
-      note: row.note,
-      sort_order: Math.max(1, rows.value.indexOf(row) + 1)
-    }
-    await api.put(`/progress-plans/${row.id}`, payload)
-    selectedRow.value = row
+    await updateTask(row)
     taskDialogOpen.value = false
-    ElMessage.success('任务已保存')
   } catch (e) {
-    ElMessage.error(e.response?.data?.detail || '保存失败')
+    notify.error(e.response?.data?.detail || '保存失败')
   }
 }
 
@@ -303,64 +284,17 @@ const deleteTaskFromDialog = async () => {
     })
 
     const target = editingRow.value
-    if (target.id) {
-      await api.delete(`/progress-plans/${target.id}`)
-    }
-
-    const idx = rows.value.indexOf(target)
-    if (idx >= 0) {
-      rows.value.splice(idx, 1)
-    }
-    if (selectedRow.value === target) {
-      selectedRow.value = null
-    }
+    await removeTask(target)
     editingRow.value = null
     taskDialogOpen.value = false
-    ElMessage.success('任务已删除')
   } catch (e) {
     if (e === 'cancel' || e === 'close') return
-    ElMessage.error(e.response?.data?.detail || '删除失败')
+    notify.error(e.response?.data?.detail || '删除失败')
   }
 }
 
 const selectBar = (row) => {
   selectedRow.value = row
-}
-
-const persistRow = async (row) => {
-  if (!row || !row.id || row._placeholder) return
-  syncRowDates(row)
-  const payload = {
-    task_name: row.task_name,
-    owner: row.owner,
-    start_date: row.start_date,
-    end_date: row.end_date,
-    progress: row.progress,
-    status: row.status,
-    predecessor: row.predecessor,
-    note: row.note,
-    sort_order: Math.max(1, rows.value.indexOf(row) + 1)
-  }
-  await api.put(`/progress-plans/${row.id}`, payload)
-}
-
-const persistSortOrders = async () => {
-  for (let i = 0; i < rows.value.length; i += 1) {
-    const row = rows.value[i]
-    if (!row?.id || row._placeholder) continue
-    syncRowDates(row)
-    await api.put(`/progress-plans/${row.id}`, {
-      task_name: row.task_name,
-      owner: row.owner,
-      start_date: row.start_date,
-      end_date: row.end_date,
-      progress: row.progress,
-      status: row.status,
-      predecessor: row.predecessor,
-      note: row.note,
-      sort_order: i + 1
-    })
-  }
 }
 
 const moveSelectedHorizontally = async (deltaDays) => {
@@ -371,9 +305,9 @@ const moveSelectedHorizontally = async (deltaDays) => {
   row.start_date = formatDate(addDays(s, deltaDays))
   syncRowDates(row)
   try {
-    await persistRow(row)
+    await persistRow(row, syncRowDates)
   } catch (e) {
-    ElMessage.error(e.response?.data?.detail || '自动保存失败')
+    notify.error(e.response?.data?.detail || '自动保存失败')
   }
 }
 
@@ -387,9 +321,9 @@ const moveSelectedVertically = async (deltaRows) => {
   rows.value.splice(from, 1)
   rows.value.splice(to, 0, row)
   try {
-    await persistSortOrders()
+    await persistSortOrders(syncRowDates)
   } catch (e) {
-    ElMessage.error(e.response?.data?.detail || '自动保存失败')
+    notify.error(e.response?.data?.detail || '自动保存失败')
   }
 }
 
@@ -441,9 +375,9 @@ const deleteSelectedByKeyboard = async () => {
     const idx = rows.value.indexOf(row)
     if (idx >= 0) rows.value.splice(idx, 1)
     selectedRow.value = null
-    ElMessage.success('任务已删除')
+    notify.success('任务已删除')
   } catch (e) {
-    ElMessage.error(e.response?.data?.detail || '删除失败')
+    notify.error(e.response?.data?.detail || '删除失败')
   }
 }
 
@@ -658,9 +592,9 @@ const onPointerUp = () => {
   window.removeEventListener('pointermove', onPointerMove)
   window.removeEventListener('pointerup', onPointerUp)
   if (movedRow && movedRow.id && !movedRow._placeholder) {
-    const savePromise = movedMode === 'move' ? persistSortOrders() : persistRow(movedRow)
+    const savePromise = movedMode === 'move' ? persistSortOrders(syncRowDates) : persistRow(movedRow, syncRowDates)
     savePromise.catch((e) => {
-      ElMessage.error(e.response?.data?.detail || '自动保存失败')
+      notify.error(e.response?.data?.detail || '自动保存失败')
     })
   }
 }
@@ -675,7 +609,7 @@ const load = async () => {
     },
     (e) => {
       if (!planRequest.isLatest(token)) return
-      ElMessage.error(e.response?.data?.detail || '加载进度计划失败')
+      notify.error(e.response?.data?.detail || '加载进度计划失败')
     }
   )
 }

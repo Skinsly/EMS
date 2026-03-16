@@ -107,13 +107,13 @@
 
 <script setup>
 import { nextTick, onBeforeUnmount, onMounted, reactive, ref } from 'vue'
-import { ElMessage } from 'element-plus'
 import { Check, Delete, Plus } from '@element-plus/icons-vue'
 import api from '../api'
 import ToolbarSearchInput from '../components/ToolbarSearchInput.vue'
 import ToolbarIconAction from '../components/ToolbarIconAction.vue'
 import StockHeadBar from '../components/StockHeadBar.vue'
 import { usePagedApiList } from '../composables/usePagedApiList'
+import { notify } from '../utils/notify'
 
 const keyword = ref('')
 const selectedPageSize = 10
@@ -325,17 +325,17 @@ const save = async () => {
   try {
     if (editingId.value) {
       await api.put(`/materials/${editingId.value}`, form)
-      ElMessage.success('保存成功')
+      notify.success('保存成功')
       open.value = false
       editingId.value = 0
     } else {
       await api.post('/materials', form)
-      ElMessage.success('添加成功')
+      notify.success('添加成功')
       Object.assign(form, { name: '', spec: '', unit: '' })
     }
     await load()
   } catch (e) {
-    ElMessage.error(e.response?.data?.detail || '保存失败')
+    notify.error(e.response?.data?.detail || '保存失败')
   }
 }
 
@@ -343,10 +343,10 @@ const deleteSelected = async () => {
   if (!selectedIds.value.length) return
   try {
     await api.post('/materials/delete', { material_ids: selectedIds.value })
-    ElMessage.success('删除成功')
+    notify.success('删除成功')
     await load()
   } catch (e) {
-    ElMessage.error(e.response?.data?.detail || '删除失败')
+    notify.error(e.response?.data?.detail || '删除失败')
   }
 }
 

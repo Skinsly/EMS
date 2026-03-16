@@ -1,9 +1,10 @@
 import { computed, onBeforeUnmount, onMounted, ref } from 'vue'
 import { onBeforeRouteLeave, useRoute, useRouter } from 'vue-router'
-import { ElMessage } from 'element-plus'
 import api from '../api'
-import { getSessionValue, removeSessionValue } from '../store'
+import { getSessionValue } from '../store'
 import { formatDateInput } from '../utils/date'
+import { notify } from '../utils/notify'
+import { removeSession } from '../utils/storage'
 
 const QUICK_STOCK_DRAFT_KEY = 'quick-stock-draft'
 
@@ -232,14 +233,14 @@ export const useStockDraftPage = (mode) => {
     const isEditing = editingRowIndex.value >= 0
     const materialId = resolveDraftMaterialId()
     if (!draftRow.value.date || !materialId) {
-      ElMessage.error('请完整填写日期和名称')
+      notify.error('请完整填写日期和名称')
       return
     }
     let qtyValue = ''
     if (draftRow.value.qty !== null && draftRow.value.qty !== '' && typeof draftRow.value.qty !== 'undefined') {
       const parsed = Number(draftRow.value.qty)
       if (Number.isNaN(parsed)) {
-        ElMessage.error('数量需为数字')
+        notify.error('数量需为数字')
         return
       }
       qtyValue = normalizeQty(parsed)
@@ -259,7 +260,7 @@ export const useStockDraftPage = (mode) => {
       page.value = totalPages.value
     }
     selectedRows.value = []
-    ElMessage.success(isEditing ? '保存成功' : '添加成功')
+    notify.success(isEditing ? '保存成功' : '添加成功')
     editingRowIndex.value = -1
     draftRow.value = createEmptyRow()
     draftMaterialText.value = ''
@@ -308,7 +309,7 @@ export const useStockDraftPage = (mode) => {
       draftDirty.value = false
       lastSavedDraftPayload.value = serialized
     } catch (e) {
-      ElMessage.error(e.response?.data?.detail || '草稿保存失败')
+      notify.error(e.response?.data?.detail || '草稿保存失败')
       if (force) {
         throw e
       }
@@ -337,14 +338,14 @@ export const useStockDraftPage = (mode) => {
       await saveDraftNow(true)
       const endpoint = isOut ? '/stock-drafts/out/commit' : '/stock-drafts/in/commit'
       const { data } = await api.post(endpoint)
-      ElMessage.success(`入账成功：${data?.result?.order_no || ''}`.trim())
+      notify.success(`入账成功：${data?.result?.order_no || ''}`.trim())
       rows.value = []
       selectedRows.value = []
       page.value = 1
       draftDirty.value = true
       await saveDraftNow(true)
     } catch (e) {
-      ElMessage.error(e.response?.data?.detail || '确认入账失败')
+      notify.error(e.response?.data?.detail || '确认入账失败')
     } finally {
       commitLoading.value = false
     }
@@ -368,7 +369,7 @@ export const useStockDraftPage = (mode) => {
       ]
       return true
     } finally {
-      removeSessionValue(QUICK_STOCK_DRAFT_KEY)
+      removeSession(QUICK_STOCK_DRAFT_KEY)
     }
   }
 
@@ -421,7 +422,7 @@ export const useStockDraftPage = (mode) => {
     window.addEventListener('beforeunload', onBeforeUnload)
     await resetPage()
     if (rows.value.length) {
-      ElMessage.warning(`你有 ${rows.value.length} 条${isOut ? '出库' : '入库'}草稿待入账`)
+      notify.warning(`你有 ${rows.value.length} 条${isOut ? '出库' : '入库'}草稿待入账`)
     }
   })
 

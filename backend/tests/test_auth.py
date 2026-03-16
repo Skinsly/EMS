@@ -2,6 +2,7 @@ from fastapi.testclient import TestClient
 from sqlalchemy.orm import Session
 
 from app.database import engine
+from app.dependencies import is_admin_user
 from app.models import User
 from app.security import get_password_hash
 
@@ -78,6 +79,11 @@ def test_non_admin_forbidden_for_high_risk_admin_endpoints(client: TestClient):
     headers = {"Authorization": f"Bearer {token}"}
 
     export_res = client.get("/api/export/database", headers=headers)
+    with Session(engine) as db:
+        operator = db.query(User).filter(User.username == "operator").first()
+        assert operator is not None
+        assert is_admin_user(db, operator) is False
+
     assert export_res.status_code == 403
 
     cleanup_res = client.post("/api/admin/attachments/cleanup", headers=headers)

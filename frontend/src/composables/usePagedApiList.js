@@ -1,7 +1,7 @@
 import { computed, ref } from 'vue'
-import { ElMessage } from 'element-plus'
 import { useLoadGuard } from './useLoadGuard'
 import { useRequestLatest } from './useRequestLatest'
+import { notify } from '../utils/notify'
 
 export const usePagedApiList = ({
   pageSize = 10,
@@ -37,7 +37,7 @@ export const usePagedApiList = ({
       },
       (error) => {
         if (!request.isLatest(token)) return
-        ElMessage.error(error?.response?.data?.detail || errorMessage)
+        notify.error(error?.response?.data?.detail || errorMessage)
       }
     )
   }

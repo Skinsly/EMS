@@ -141,7 +141,15 @@ docker compose --env-file deploy/.env -f deploy/docker-compose.yml up -d --build
 
 ### Backend 模块边界（当前）
 
-- `backend/app/main.py`：路由与应用装配（依赖注入、生命周期、路由编排）
+- `backend/app/main.py`：应用装配、中间件、router 注册、基础运维接口
+- `backend/app/startup.py`：生命周期、目录初始化、schema 补丁、启动期补数
+- `backend/app/frontend_static.py`：前端静态资源、PWA 资源、SPA fallback
+- `backend/app/routers_core.py`：认证、初始化、工程、文件分类、项目文件
+- `backend/app/routers_logs.py`：施工日志接口
+- `backend/app/routers_progress.py`：进度计划接口
+- `backend/app/routers_assets.py`：材料、库存、机械台账、相关导出接口
+- `backend/app/routers_stock.py`：入库、出库、草稿、记录、更正、导出接口
+- `backend/app/routers_attachments.py`：附件、现场照片、附件清理接口
 - `backend/app/dependencies.py`：认证、管理员校验、工程上下文校验
 - `backend/app/services/bootstrap_import.py`：导入 SQLite 数据包流程与校验
 - `backend/app/services/attachments.py`：附件上传/命名/路径安全/清理与归一化
@@ -155,3 +163,28 @@ docker compose --env-file deploy/.env -f deploy/docker-compose.yml up -d --build
 ## 相关说明
 
 - 前端复用规范：`frontend/src/component-reuse-guidelines.md`
+- 重构说明：`REFACTOR_NOTES.md`
+- 维护约定：`MAINTENANCE_GUIDE.md`
+- 测试计划：`TEST_PLAN.md`
+- 本轮重构变更记录：`CHANGELOG_REFACTOR.md`
+
+## 补充测试建议
+
+可在现有基础上补充以下验证：
+
+```bash
+# 后端
+cd backend
+python -m pytest tests/test_router_regression.py -q
+
+# 前端
+cd ../frontend
+npm run test
+```
+
+新增的高价值测试文件包括：
+
+- `backend/tests/test_router_regression.py`
+- `frontend/src/composables/useProgressPlanPersistence.test.js`
+- `frontend/src/composables/useMachineLedgerPhotos.test.js`
+- `frontend/src/composables/useConstructionLogPhotos.test.js`

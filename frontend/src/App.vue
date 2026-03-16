@@ -116,9 +116,8 @@
 </template>
 
 <script setup>
-import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue'
+import { onBeforeUnmount, onMounted, ref } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
-import { ElMessage } from 'element-plus'
 import {
   ArrowLeftBold,
   ArrowRightBold,
@@ -141,6 +140,9 @@ import {
 import api from './api'
 import { downloadByApi } from './download'
 import { useAuthStore } from './store'
+import { useAppShell } from './composables/useAppShell'
+import { notify } from './utils/notify'
+import { readPreference, storageKeys, writePreference } from './utils/storage'
 
 const route = useRoute()
 const router = useRouter()
@@ -150,11 +152,6 @@ const openSettings = ref(false)
 const newUsername = ref('')
 const oldPassword = ref('')
 const newPassword = ref('')
-const theme = ref('light')
-const isSidebarCollapsed = ref(false)
-const isMobileLayout = ref(false)
-const mobileMenuOpen = ref(false)
-const lastDraftPendingToastTotal = ref(-1)
 const menuItems = [
   { index: '/construction-logs', label: '施工日志', icon: Document },
   { index: '/file-manage', label: '文件管理', icon: FolderOpened },
@@ -166,34 +163,16 @@ const menuItems = [
   { index: '/inventory', label: '库存台账', icon: CollectionTag },
   { index: '/progress-plan', label: '进度计划', icon: Calendar }
 ]
-const isMenuCollapsed = computed(() => !isMobileLayout.value && isSidebarCollapsed.value)
-
-const showMainLayout = computed(() => route.path !== '/login' && route.path !== '/projects')
-
-const updateMobileLayout = () => {
-  isMobileLayout.value = window.matchMedia('(max-width: 900px)').matches
-  if (!isMobileLayout.value) {
-    mobileMenuOpen.value = false
-  }
-}
-
-const applyTheme = (mode) => {
-  document.documentElement.setAttribute('data-theme', mode)
-}
-
-const toggleTheme = () => {
-  theme.value = theme.value === 'dark' ? 'light' : 'dark'
-}
-
-const toggleSidebar = () => {
-  isSidebarCollapsed.value = !isSidebarCollapsed.value
-  localStorage.setItem('sidebarCollapsed', isSidebarCollapsed.value ? '1' : '0')
-  window.dispatchEvent(
-    new CustomEvent('sidebar-collapse-changed', {
-      detail: { collapsed: isSidebarCollapsed.value }
-    })
-  )
-}
+const {
+  theme,
+  isSidebarCollapsed,
+  isMobileLayout,
+  mobileMenuOpen,
+  showMainLayout,
+  isMenuCollapsed,
+  toggleTheme,
+  toggleSidebar
+} = useAppShell({ route, api, notify, readPreference, storageKeys, writePreference })
 
 const goProjectEntry = () => {
   router.push('/projects')
@@ -203,64 +182,13 @@ const onCloseAllDialogs = () => {
   openSettings.value = false
 }
 
-const loadDraftPending = async () => {
-  if (!showMainLayout.value) return
-  try {
-    const { data } = await api.get('/stock-drafts/pending/count')
-    const total = Number(data?.total || 0)
-    if (total > 0 && total !== lastDraftPendingToastTotal.value) {
-      ElMessage.warning(`你有 ${total} 条待入账草稿`)
-    }
-    lastDraftPendingToastTotal.value = total
-  } catch {
-    // ignore draft reminder failures
-  }
-}
-
 onMounted(() => {
-  updateMobileLayout()
-  window.addEventListener('resize', updateMobileLayout)
-
-  const saved = localStorage.getItem('theme')
-  if (saved === 'dark' || saved === 'light') {
-    theme.value = saved
-  } else {
-    theme.value = window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light'
-  }
-  applyTheme(theme.value)
-
-  const savedSidebar = localStorage.getItem('sidebarCollapsed')
-  if (savedSidebar === '1') {
-    isSidebarCollapsed.value = true
-  }
-  window.dispatchEvent(
-    new CustomEvent('sidebar-collapse-changed', {
-      detail: { collapsed: isSidebarCollapsed.value }
-    })
-  )
-
-  loadDraftPending()
   window.addEventListener('close-all-dialogs', onCloseAllDialogs)
-
 })
 
 onBeforeUnmount(() => {
-  window.removeEventListener('resize', updateMobileLayout)
   window.removeEventListener('close-all-dialogs', onCloseAllDialogs)
 })
-
-watch(theme, (value) => {
-  localStorage.setItem('theme', value)
-  applyTheme(value)
-})
-
-watch(
-  () => route.path,
-  () => {
-    mobileMenuOpen.value = false
-    loadDraftPending()
-  }
-)
 
 const logout = () => {
   auth.logout()
@@ -271,7 +199,7 @@ const changePwd = async () => {
   const usernameValue = newUsername.value.trim()
   const passwordValue = newPassword.value.trim()
   if (!usernameValue && !passwordValue) {
-    ElMessage.error('请至少填写新账号或新密码')
+    notify.error('请至少填写新账号或新密码')
     return
   }
   try {
@@ -283,22 +211,22 @@ const changePwd = async () => {
     if (data?.username_changed && data?.username) {
       auth.setUsername(data.username)
     }
-    ElMessage.success('账号和密码信息已更新')
+    notify.success('账号和密码信息已更新')
     openSettings.value = false
     newUsername.value = ''
     oldPassword.value = ''
     newPassword.value = ''
   } catch (e) {
-    ElMessage.error(e.response?.data?.detail || '修改失败')
+    notify.error(e.response?.data?.detail || '修改失败')
   }
 }
 
 const exportDatabase = async () => {
   try {
     await downloadByApi('/export/database', 'app.db')
-    ElMessage.success('数据库导出成功')
+    notify.success('数据库导出成功')
   } catch (e) {
-    ElMessage.error(e.response?.data?.detail || '数据库导出失败')
+    notify.error(e.response?.data?.detail || '数据库导出失败')
   }
 }
 

@@ -210,7 +210,7 @@
 
 <script setup>
 import { computed, onBeforeUnmount, onMounted, reactive, ref, watch } from 'vue'
-import { ElMessage, ElMessageBox } from 'element-plus'
+import { ElMessageBox } from 'element-plus'
 import { ArrowDown, Check, Delete, Edit, Plus, Upload } from '@element-plus/icons-vue'
 import api from '../api'
 import { downloadByApi } from '../download'
@@ -218,6 +218,7 @@ import StockHeadBar from '../components/StockHeadBar.vue'
 import ToolbarIconAction from '../components/ToolbarIconAction.vue'
 import ToolbarSearchInput from '../components/ToolbarSearchInput.vue'
 import { usePagedApiList } from '../composables/usePagedApiList'
+import { notify } from '../utils/notify'
 
 const categories = ref([])
 const categoryFilter = ref('')
@@ -334,8 +335,8 @@ const onPickedFile = (event) => {
 
 const submitUpload = async () => {
   if (uploading.value) return
-  if (!uploadForm.category_id) return ElMessage.error('请选择分类')
-  if (!pickedFile.value) return ElMessage.error('请选择文件')
+  if (!uploadForm.category_id) return notify.error('请选择分类')
+  if (!pickedFile.value) return notify.error('请选择文件')
   uploading.value = true
   try {
     const fd = new FormData()
@@ -346,12 +347,12 @@ const submitUpload = async () => {
         remark: uploadForm.remark || ''
       }
     })
-    ElMessage.success('上传成功')
+    notify.success('上传成功')
     resetUploadForm()
     uploadOpen.value = false
     await loadFiles()
   } catch (e) {
-    ElMessage.error(e.response?.data?.detail || '上传失败')
+    notify.error(e.response?.data?.detail || '上传失败')
   } finally {
     uploading.value = false
   }
@@ -364,14 +365,14 @@ const createCategory = async () => {
 
 const submitCreateCategory = async () => {
   const name = createCategoryName.value.trim()
-  if (!name) return ElMessage.error('分类名称不能为空')
+  if (!name) return notify.error('分类名称不能为空')
   try {
     await api.post('/file-categories', { name })
-    ElMessage.success('分类已新增')
+    notify.success('分类已新增')
     createCategoryOpen.value = false
     await loadCategories()
   } catch (e) {
-    ElMessage.error(e.response?.data?.detail || '新增分类失败')
+    notify.error(e.response?.data?.detail || '新增分类失败')
   }
 }
 
@@ -384,15 +385,15 @@ const renameCategory = async () => {
 const submitRenameCategory = async () => {
   if (!activeCategory.value) return
   const name = renameCategoryName.value.trim()
-  if (!name) return ElMessage.error('分类名称不能为空')
+  if (!name) return notify.error('分类名称不能为空')
   try {
     await api.put(`/file-categories/${activeCategory.value.id}`, { name })
-    ElMessage.success('分类已重命名')
+    notify.success('分类已重命名')
     renameCategoryOpen.value = false
     await loadCategories()
     await loadFiles()
   } catch (e) {
-    ElMessage.error(e.response?.data?.detail || '分类重命名失败')
+    notify.error(e.response?.data?.detail || '分类重命名失败')
   }
 }
 
@@ -408,9 +409,9 @@ const deleteCategory = async () => {
 const submitDeleteCategory = async () => {
   if (!activeCategory.value || deletingCategory.value) return
   const password = deleteCategoryPassword.value.trim()
-  if (!password) return ElMessage.error('请输入登录密码')
+  if (!password) return notify.error('请输入登录密码')
   if (deleteCategoryNeedConfirm.value && !deleteCategoryConfirmed.value) {
-    return ElMessage.error('请先确认删除该分类下全部文件')
+    return notify.error('请先确认删除该分类下全部文件')
   }
 
   deletingCategory.value = true
@@ -421,7 +422,7 @@ const submitDeleteCategory = async () => {
         delete_files_confirmed: deleteCategoryNeedConfirm.value && deleteCategoryConfirmed.value
       }
     })
-    ElMessage.success(deleteCategoryNeedConfirm.value ? '分类及内部文件已删除' : '分类已删除')
+    notify.success(deleteCategoryNeedConfirm.value ? '分类及内部文件已删除' : '分类已删除')
     deleteCategoryOpen.value = false
     if (String(categoryFilter.value) === String(activeCategory.value.id)) {
       categoryFilter.value = ''
@@ -433,9 +434,9 @@ const submitDeleteCategory = async () => {
     if (detail.includes('请确认是否一并删除')) {
       deleteCategoryNeedConfirm.value = true
       deleteCategoryWarning.value = detail
-      return ElMessage.warning('该分类下有文件，请勾选确认后再次提交')
+      return notify.warning('该分类下有文件，请勾选确认后再次提交')
     }
-    ElMessage.error(detail || '删除分类失败')
+    notify.error(detail || '删除分类失败')
   } finally {
     deletingCategory.value = false
   }
@@ -445,11 +446,11 @@ const removeFile = async (row) => {
   try {
     await ElMessageBox.confirm(`删除文件“${row.filename}”后不可恢复，是否继续？`, '删除确认', { type: 'warning' })
     await api.delete(`/project-files/${row.id}`)
-    ElMessage.success('文件已删除')
+    notify.success('文件已删除')
     await loadFiles()
   } catch (e) {
     if (e === 'cancel' || e === 'close') return
-    ElMessage.error(e.response?.data?.detail || '删除文件失败')
+    notify.error(e.response?.data?.detail || '删除文件失败')
   }
 }
 
@@ -457,7 +458,7 @@ const downloadFile = async (row) => {
   try {
     await downloadByApi(`/project-files/${row.id}/download`, row.filename)
   } catch (e) {
-    ElMessage.error(e.response?.data?.detail || '下载失败')
+    notify.error(e.response?.data?.detail || '下载失败')
   }
 }
 
@@ -470,7 +471,7 @@ const previewFile = (row) => {
       window.setTimeout(() => window.URL.revokeObjectURL(url), 60000)
     })
     .catch((e) => {
-      ElMessage.error(e.response?.data?.detail || '预览失败')
+      notify.error(e.response?.data?.detail || '预览失败')
     })
 }
 

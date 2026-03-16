@@ -118,10 +118,10 @@
 <script setup>
 import { computed, onBeforeUnmount, onMounted, reactive, ref } from 'vue'
 import { useRouter } from 'vue-router'
-import { ElMessage } from 'element-plus'
 import { Check, Delete, Plus, SwitchButton } from '@element-plus/icons-vue'
 import api from '../api'
 import { useAuthStore } from '../store'
+import { notify } from '../utils/notify'
 import { formatDateInput } from '../utils/date'
 import { useLoadGuard } from '../composables/useLoadGuard'
 import { useRequestLatest } from '../composables/useRequestLatest'
@@ -129,7 +129,7 @@ import { createProjectsActions } from './projectsActions'
 
 const router = useRouter()
 const auth = useAuthStore()
-const actions = createProjectsActions({ auth, router, message: ElMessage })
+const actions = createProjectsActions({ auth, router, message: notify })
 
 const open = ref(false)
 const deleteOpen = ref(false)
@@ -168,7 +168,7 @@ const loadProjects = async () => {
     },
     (e) => {
       if (!projectListRequest.isLatest(token)) return
-      ElMessage.error(e.response?.data?.detail || '加载工程列表失败')
+      notify.error(e.response?.data?.detail || '加载工程列表失败')
     }
   )
 }
@@ -218,7 +218,7 @@ const updateMobileDialog = () => {
 const createProject = async () => {
   if (creating.value) return
   if (!form.name.trim()) {
-    ElMessage.error('请填写工程名称')
+    notify.error('请填写工程名称')
     return
   }
   creating.value = true
@@ -227,13 +227,13 @@ const createProject = async () => {
       name: form.name,
       start_date: form.start_date || ''
     })
-    ElMessage.success('工程创建成功')
+    notify.success('工程创建成功')
     open.value = false
     form.name = ''
     form.start_date = ''
     await loadProjects()
   } catch (e) {
-    ElMessage.error(e.response?.data?.detail || '创建失败')
+    notify.error(e.response?.data?.detail || '创建失败')
   } finally {
     creating.value = false
   }
@@ -258,12 +258,12 @@ const deleteProject = async () => {
       })
     }
     actions.clearDeletedProjects(deletingIds)
-    ElMessage.success('工程已删除')
+    notify.success('工程已删除')
     deleteOpen.value = false
     selectedProjects.value = []
     await loadProjects()
   } catch (e) {
-    ElMessage.error(e.response?.data?.detail || '删除失败')
+    notify.error(e.response?.data?.detail || '删除失败')
   } finally {
     deleting.value = false
   }

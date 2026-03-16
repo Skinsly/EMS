@@ -103,10 +103,10 @@
 <script setup>
 import { onBeforeUnmount, ref, watch } from 'vue'
 import { useRouter } from 'vue-router'
-import { ElMessage } from 'element-plus'
 import { Check, Setting, UploadFilled } from '@element-plus/icons-vue'
 import api from '../api'
 import { useAuthStore } from '../store'
+import { notify } from '../utils/notify'
 import { createLoginActions } from './loginActions'
 
 const router = useRouter()
@@ -139,7 +139,7 @@ const showLoginError = (message) => {
 const actions = createLoginActions({
   auth,
   router,
-  message: ElMessage,
+  message: notify,
   showLoginError
 })
 
@@ -169,7 +169,7 @@ const submitInit = async () => {
     username.value = initUser
     password.value = initPass
     initPassword.value = ''
-    ElMessage.success('初始化成功，请登录')
+    notify.success('初始化成功，请登录')
   } catch (e) {
     showLoginError(e.response?.data?.detail || '初始化失败')
   }
@@ -204,7 +204,7 @@ const importDataPackage = async () => {
     const formData = new FormData()
     formData.append('file', importFileRaw.value)
     await api.post('/bootstrap/import-package', formData)
-    ElMessage.success('数据包导入成功，请登录')
+    notify.success('数据包导入成功，请登录')
     openImportDialog.value = false
     importFileName.value = ''
     importFileRaw.value = null

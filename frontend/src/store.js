@@ -1,19 +1,10 @@
 import { defineStore } from 'pinia'
+import { readSession, removeSession, storageKeys, writeSession } from './utils/storage'
 
-const readSession = (key) => sessionStorage.getItem(key) || ''
-
-export const setSessionValue = (key, value) => {
-  sessionStorage.setItem(key, value)
-}
-
-export const removeSessionValue = (key) => {
-  sessionStorage.removeItem(key)
-}
-
-export const getSessionToken = () => readSession('token')
-export const getSessionUsername = () => readSession('username')
-export const getSessionProjectId = () => readSession('projectId')
-export const getSessionProjectName = () => readSession('projectName')
+export const getSessionToken = () => readSession(storageKeys.session.token)
+export const getSessionUsername = () => readSession(storageKeys.session.username)
+export const getSessionProjectId = () => readSession(storageKeys.session.projectId)
+export const getSessionProjectName = () => readSession(storageKeys.session.projectName)
 export const getSessionValue = readSession
 
 export const useAuthStore = defineStore('auth', {
@@ -31,34 +22,30 @@ export const useAuthStore = defineStore('auth', {
     setAuth(username, token) {
       this.username = username
       this.token = token
-      setSessionValue('username', username)
-      setSessionValue('token', token)
+      writeSession(storageKeys.session.username, username)
+      writeSession(storageKeys.session.token, token)
     },
     setUsername(username) {
       this.username = username
-      setSessionValue('username', username)
+      writeSession(storageKeys.session.username, username)
     },
     setProject(project) {
       this.projectId = String(project.id)
       this.projectName = project.name
-      setSessionValue('projectId', String(project.id))
-      setSessionValue('projectName', project.name)
+      writeSession(storageKeys.session.projectId, String(project.id))
+      writeSession(storageKeys.session.projectName, project.name)
     },
     clearProject() {
       this.projectId = ''
       this.projectName = ''
-      removeSessionValue('projectId')
-      removeSessionValue('projectName')
+      removeSession(storageKeys.session.projectId)
+      removeSession(storageKeys.session.projectName)
     },
     logout() {
       this.username = ''
       this.token = ''
-      removeSessionValue('username')
-      removeSessionValue('token')
-      localStorage.removeItem('username')
-      localStorage.removeItem('token')
-      localStorage.removeItem('projectId')
-      localStorage.removeItem('projectName')
+      removeSession(storageKeys.session.username)
+      removeSession(storageKeys.session.token)
       this.clearProject()
     }
   }
